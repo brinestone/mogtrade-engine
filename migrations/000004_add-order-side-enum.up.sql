@@ -1,0 +1,1 @@
+CREATE TYPE order_side AS ENUM('sell', 'buy');

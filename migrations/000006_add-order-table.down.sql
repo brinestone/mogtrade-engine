@@ -1,0 +1,3 @@
+TRUNCATE TABLE orders;
+
+DROP TABLE orders;

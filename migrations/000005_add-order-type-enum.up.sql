@@ -1,0 +1,1 @@
+CREATE TYPE order_type AS ENUM('market', 'limit', 'stop', 'stop_limit');

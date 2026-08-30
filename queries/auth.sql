@@ -1,3 +1,13 @@
+-- name: FindUserByEmail :one
+SELECT
+    *
+FROM
+    "user"
+WHERE
+    email = $1
+LIMIT
+    1;
+
 -- name: FindUserById :one
 SELECT
     *
