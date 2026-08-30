@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,13 +15,16 @@ var (
 )
 
 func main() {
+	ctx, canceller := context.WithCancel(context.Background())
+	defer canceller()
 	err := parseVars()
 	if err != nil {
 		panic(err)
 	}
 	engine := gin.Default()
 	baseRouter := engine.Group("/api")
-	api.MountApiV1(baseRouter)
+	cfg, err := api.ExtractApiConfigFromEnv(ctx)
+	api.MountApiV1(baseRouter, cfg)
 	engine.Run(fmt.Sprintf(":%d", port))
 }
 

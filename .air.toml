@@ -31,6 +31,12 @@ rerun_delay = 500
 send_interrupt = false
 stop_on_error = false
 
+[[build.rules]]
+name = "migrations"
+include_dir = ["migrations"]
+include_ext = ["sql"]
+cmd = "migrate -database \"${DB_URL}\" -path migrations up"
+
 [build.windows]
 args_bin = []
 bin = "tmp\\main.exe"
