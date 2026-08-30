@@ -203,6 +203,26 @@ type Account struct {
 	UpdatedAt             pgtype.Timestamp
 }
 
+type Ohlcv struct {
+	Time   pgtype.Timestamptz
+	Symbol string
+	Open   pgtype.Numeric
+	High   pgtype.Numeric
+	Low    pgtype.Numeric
+	Close  pgtype.Numeric
+	Volume pgtype.Numeric
+}
+
+type Ohlcv1h struct {
+	Bucket interface{}
+	Symbol string
+	Open   interface{}
+	High   interface{}
+	Low    interface{}
+	Close  interface{}
+	Volume int64
+}
+
 type Order struct {
 	UserID           pgtype.Text
 	Symbol           string
