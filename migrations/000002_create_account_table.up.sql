@@ -1,8 +1,9 @@
+CREATE TYPE account_provider AS ENUM ('credential', 'google-oauth');
 CREATE TABLE account(
-    id: varchar(26) PRIMARY KEY,
+    id varchar(26) PRIMARY KEY,
     issuer text NOT NULL,
     account_id TEXT NOT NULL,
-    provider_id TEXT NOT NULL,
+    provider account_provider NOT NULL,
     user_id varchar(26) NOT NULL,
     access_token TEXT,
     refresh_token TEXT,
