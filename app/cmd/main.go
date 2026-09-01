@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/api"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,6 +38,9 @@ func main() {
 	if err := setupDbConnection(ctx); err != nil {
 		panic(err)
 	}
+	if err := setupServices(); err != nil {
+		panic(err)
+	}
 
 	engine := gin.Default()
 	baseRouter := engine.Group("/api")
@@ -45,6 +50,12 @@ func main() {
 	engine.Run(fmt.Sprintf(":%d", port))
 }
 
+func setupServices() error {
+	if err := ioc.Factory(orders.NewRiskEngine, true); err != nil {
+		return err
+	}
+	return nil
+}
 func setupLogging(ctx context.Context) error {
 	var logger *slog.Logger
 	if os.Getenv("LOGGING") != "enable" {
@@ -92,7 +103,7 @@ func setupLogging(ctx context.Context) error {
 	// Register it to the DI container right here
 	if err := ioc.Factory(func() *slog.Logger {
 		return logger
-	}); err != nil {
+	}, true); err != nil {
 		return err
 	}
 	return nil
@@ -113,10 +124,14 @@ func setupDbConnection(ctx context.Context) error {
 		return err
 	}
 	if err = pool.Ping(ctx); err != nil {
-		return nil
+		return err
 	}
 
 	ioc.Bind(pool)
+
+	ioc.Factory(func(pool *pgxpool.Pool) *db.Queries {
+		return db.New(pool)
+	}, true)
 	return nil
 }
 

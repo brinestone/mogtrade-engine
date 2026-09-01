@@ -7,13 +7,15 @@ import (
 
 	"github.com/brinestone/mogtrade/core/payloads"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/gin-gonic/gin"
 	"go-slim.dev/ioc"
 )
 
 type Orders struct {
-	repo   *db.Queries
-	logger *slog.Logger
+	repo       *db.Queries
+	logger     *slog.Logger
+	riskEngine *orders.RiskEngine
 }
 
 func (o *Orders) HandlePlaceOrder(ctx *gin.Context) {
@@ -39,17 +41,24 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 
 func NewOrdersController() (*Orders, error) {
 	o := Orders{}
-	logger, err := ioc.Get[*slog.Logger](context.TODO())
+	ctx := context.TODO()
+	logger, err := ioc.Get[*slog.Logger](ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	o.logger = (*logger).With("controller", "orders")
 
-	repo, err := ioc.Get[*db.Queries](context.TODO())
+	repo, err := ioc.Get[*db.Queries](ctx)
 	if err != nil {
 		return nil, err
 	}
 	o.repo = (*repo)
+
+	re, err := ioc.Get[*orders.RiskEngine](ctx)
+	if err != nil {
+		return nil, err
+	}
+	o.riskEngine = *re
 	return &o, nil
 }
