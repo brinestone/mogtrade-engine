@@ -9,17 +9,17 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/cmd/main.go"
+            "program": "${workspaceFolder}/app/cmd/main.go"
         },
         {
             "name": "Launch Package",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd",
-            "envFile": "${workspaceFolder}/cmd/.env",
+            "program": "${workspaceFolder}/app/cmd",
+            "envFile": "${workspaceFolder}/app/cmd/.env",
             "cwd": "${workspaceFolder}",
-            "buildFlags": ["-o", "${workspaceFolder}/tmp/main.exe"]
+            "output": "${workspaceFolder}/tmp/main",
         }
     ]
 }

@@ -1,13 +1,14 @@
 package controller
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
-	db "github.com/brinestone/mogtrade/internal/models"
-	"github.com/brinestone/mogtrade/libs/payloads"
+	"github.com/brinestone/mogtrade/core/payloads"
+	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/gin-gonic/gin"
-	"github.com/golobby/container/v3"
+	"go-slim.dev/ioc"
 )
 
 type Orders struct {
@@ -36,17 +37,19 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 	router.POST("", c.HandlePlaceOrder)
 }
 
-func NewOrdersController(ioc *container.Container) (*Orders, error) {
+func NewOrdersController() (*Orders, error) {
 	o := Orders{}
-	logger := slog.Logger{}
-	if err := ioc.Resolve(&logger); err != nil {
+	logger, err := ioc.Get[*slog.Logger](context.TODO())
+	if err != nil {
 		return nil, err
 	}
 
-	o.logger = logger.With("controller", "orders")
+	o.logger = (*logger).With("controller", "orders")
 
-	if err := ioc.Resolve(&o.repo); err != nil {
+	repo, err := ioc.Get[*db.Queries](context.TODO())
+	if err != nil {
 		return nil, err
 	}
+	o.repo = (*repo)
 	return &o, nil
 }

@@ -1,5 +1,5 @@
 #:schema https://json.schemastore.org/any.json
-env_files = ["cmd/.env"]
+env_files = ["app/cmd/.env"]
 root = "."
 testdata_dir = "testdata"
 tmp_dir = "tmp"
@@ -7,7 +7,7 @@ tmp_dir = "tmp"
 [build]
 args_bin = []
 bin = "./tmp/main"
-cmd = "go build -o ./tmp/main cmd"
+cmd = "go build -o ./app/cmd/tmp/main ./app/cmd"
 delay = 1000
 entrypoint = ["./tmp/main"]
 exclude_dir = ["logs","assets", "tmp", "vendor", "testdata", ".vfox", ".vscode"]
@@ -40,7 +40,7 @@ stop_on_error = false
 [build.windows]
 args_bin = []
 bin = "tmp\\main.exe"
-cmd = "go build -o ./tmp/main.exe cmd/main.go"
+cmd = "go build -o ./tmp/main.exe ./app/cmd"
 entrypoint = ["tmp\\main.exe"]
 full_bin = ""
 post_cmd = []

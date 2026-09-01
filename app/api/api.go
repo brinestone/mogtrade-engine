@@ -3,27 +3,26 @@ package api
 import (
 	"net/http"
 
-	"github.com/brinestone/mogtrade/controller"
-	db "github.com/brinestone/mogtrade/internal/models"
+	"github.com/brinestone/mogtrade/web/controller"
 	"github.com/gin-gonic/gin"
-	"github.com/golobby/container/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go-slim.dev/ioc"
 )
 
-func MountApiV1(r *gin.RouterGroup, ioc *container.Container) error {
+func MountApiV1(r *gin.RouterGroup) error {
 	router := r.Group("/v1")
 
-	orders, err := controller.NewOrdersController(ioc)
+	orders, err := controller.NewOrdersController()
 	if err != nil {
 		return err
 	}
 
 	orders.MountV1(router)
-	mountHealth(router, ioc)
+	mountHealth(router)
 	return nil
 }
 
-func mountHealth(r *gin.RouterGroup, ioc *container.Container) {
+func mountHealth(r *gin.RouterGroup) {
 	r.GET("/health", func(c *gin.Context) {
 		var conn *pgxpool.Conn
 		if err := ioc.Resolve(conn); err != nil {
@@ -38,12 +37,13 @@ func mountHealth(r *gin.RouterGroup, ioc *container.Container) {
 	})
 }
 
-func SetupControllers(ioc *container.Container) error {
-	if err := ioc.Singleton(func(repo *db.Queries) *controller.Orders {
-		orders := controller.Orders{}
-		return &orders
-	}); err != nil {
-		return err
-	}
+func SetupControllers() error {
 	return nil
+	// if err := ioc.Singleton(func(repo *db.Queries) *controller.Orders {
+	// 	orders := controller.Orders{}
+	// 	return &orders
+	// }); err != nil {
+	// 	return err
+	// }
+	// return nil
 }
