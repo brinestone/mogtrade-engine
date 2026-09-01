@@ -1,3 +1,5 @@
 .env
 .vfox/
 tmp
+logs
+__debug*

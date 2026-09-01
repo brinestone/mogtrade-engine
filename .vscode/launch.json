@@ -16,7 +16,10 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd"
+            "program": "${workspaceFolder}/cmd",
+            "envFile": "${workspaceFolder}/cmd/.env",
+            "cwd": "${workspaceFolder}",
+            "buildFlags": ["-o", "${workspaceFolder}/tmp/main.exe"]
         }
     ]
 }

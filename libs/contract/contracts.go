@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"log/slog"
+
 	db "github.com/brinestone/mogtrade/internal/models"
 	"github.com/golobby/container/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,4 +16,8 @@ type UsesDatabase interface {
 }
 type UsesRepository interface {
 	GetRepo() *db.Queries
+}
+type UsesLogger interface {
+	GetLogger() *slog.Logger
+	GetLoggerGroup(group string) *slog.Logger
 }
