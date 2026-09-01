@@ -342,11 +342,21 @@ type Wallet struct {
 	StartingBalance pgtype.Numeric
 }
 
-type WalletEventLedger struct {
+type WalletLedgerEntry struct {
 	Wallet      pgtype.Text
 	Notes       string
 	RecordedAt  pgtype.Timestamptz
 	Transaction pgtype.Text
+}
+
+type WalletSnapshot struct {
+	WalletID          string
+	OwnerID           pgtype.Text
+	StartingBalance   pgtype.Numeric
+	CurrentBalance    int32
+	TotalTransactions int64
+	LastActivityAt    interface{}
+	SnapshotCreatedAt interface{}
 }
 
 type WalletTransaction struct {
@@ -355,10 +365,11 @@ type WalletTransaction struct {
 	Value            pgtype.Numeric
 	Src              pgtype.Text
 	Dest             pgtype.Text
-	Motive           pgtype.Text
+	Intent           pgtype.Text
 	RecordedAt       pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	ExtraData        []byte
 	IdempotencyToken string
 	DoneBy           pgtype.Text
+	TracingID        string
 }
