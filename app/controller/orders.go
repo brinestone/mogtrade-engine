@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/brinestone/mogtrade/core/payloads"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/web/payloads"
 	"github.com/gin-gonic/gin"
 	"go-slim.dev/ioc"
 )
