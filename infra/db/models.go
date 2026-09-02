@@ -353,10 +353,10 @@ type WalletSnapshot struct {
 	WalletID          string
 	OwnerID           pgtype.Text
 	StartingBalance   pgtype.Numeric
-	CurrentBalance    int32
+	CurrentBalance    pgtype.Numeric
 	TotalTransactions int64
-	LastActivityAt    interface{}
-	SnapshotCreatedAt interface{}
+	LastActivityAt    pgtype.Timestamptz
+	SnapshotCreatedAt pgtype.Timestamptz
 }
 
 type WalletTransaction struct {
