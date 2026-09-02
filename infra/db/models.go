@@ -186,6 +186,92 @@ func (ns NullOrderType) Value() (driver.Value, error) {
 	return string(ns.OrderType), nil
 }
 
+type WalletTransactionStatus string
+
+const (
+	WalletTransactionStatusProcessing WalletTransactionStatus = "processing"
+	WalletTransactionStatusProcessed  WalletTransactionStatus = "processed"
+	WalletTransactionStatusCancelled  WalletTransactionStatus = "cancelled"
+	WalletTransactionStatusFailed     WalletTransactionStatus = "failed"
+)
+
+func (e *WalletTransactionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = WalletTransactionStatus(s)
+	case string:
+		*e = WalletTransactionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for WalletTransactionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullWalletTransactionStatus struct {
+	WalletTransactionStatus WalletTransactionStatus
+	Valid                   bool // Valid is true if WalletTransactionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullWalletTransactionStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.WalletTransactionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.WalletTransactionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullWalletTransactionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.WalletTransactionStatus), nil
+}
+
+type WalletTransactionType string
+
+const (
+	WalletTransactionTypeCredit WalletTransactionType = "credit"
+	WalletTransactionTypeDebit  WalletTransactionType = "debit"
+)
+
+func (e *WalletTransactionType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = WalletTransactionType(s)
+	case string:
+		*e = WalletTransactionType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for WalletTransactionType: %T", src)
+	}
+	return nil
+}
+
+type NullWalletTransactionType struct {
+	WalletTransactionType WalletTransactionType
+	Valid                 bool // Valid is true if WalletTransactionType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullWalletTransactionType) Scan(value interface{}) error {
+	if value == nil {
+		ns.WalletTransactionType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.WalletTransactionType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullWalletTransactionType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.WalletTransactionType), nil
+}
+
 type Account struct {
 	ID                    string
 	Issuer                string
@@ -248,4 +334,42 @@ type User struct {
 	Image         pgtype.Text
 	CreatedAt     pgtype.Timestamp
 	UpdatedAt     pgtype.Timestamp
+}
+
+type Wallet struct {
+	ID              string
+	Owner           pgtype.Text
+	StartingBalance pgtype.Numeric
+}
+
+type WalletLedgerEntry struct {
+	Wallet      pgtype.Text
+	Notes       string
+	RecordedAt  pgtype.Timestamptz
+	Transaction pgtype.Text
+}
+
+type WalletSnapshot struct {
+	WalletID          string
+	OwnerID           pgtype.Text
+	StartingBalance   pgtype.Numeric
+	CurrentBalance    pgtype.Numeric
+	TotalTransactions int64
+	LastActivityAt    pgtype.Timestamptz
+	SnapshotCreatedAt pgtype.Timestamptz
+}
+
+type WalletTransaction struct {
+	ID               string
+	Type             WalletTransactionType
+	Value            pgtype.Numeric
+	Src              pgtype.Text
+	Dest             pgtype.Text
+	Intent           pgtype.Text
+	RecordedAt       pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	ExtraData        []byte
+	IdempotencyToken string
+	DoneBy           pgtype.Text
+	TracingID        string
 }
