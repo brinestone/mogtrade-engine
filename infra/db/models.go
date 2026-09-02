@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	decimal "github.com/shopspring/decimal"
 )
 
 type AccountProvider string
@@ -278,13 +279,13 @@ type Account struct {
 	AccountID             string
 	Provider              AccountProvider
 	UserID                string
-	AccessToken           pgtype.Text
-	RefreshToken          pgtype.Text
-	IDToken               pgtype.Text
+	AccessToken           *string
+	RefreshToken          *string
+	IDToken               *string
 	AccessTokenExpiresAt  pgtype.Timestamp
 	RefreshTokenExpiresAt pgtype.Timestamp
-	Scope                 pgtype.Text
-	Password              pgtype.Text
+	Scope                 *string
+	Password              *string
 	CreatedAt             pgtype.Timestamp
 	UpdatedAt             pgtype.Timestamp
 }
@@ -292,11 +293,11 @@ type Account struct {
 type Ohlcv struct {
 	Time   pgtype.Timestamptz
 	Symbol string
-	Open   pgtype.Numeric
-	High   pgtype.Numeric
-	Low    pgtype.Numeric
-	Close  pgtype.Numeric
-	Volume pgtype.Numeric
+	Open   decimal.Decimal
+	High   decimal.Decimal
+	Low    decimal.Decimal
+	Close  decimal.Decimal
+	Volume decimal.Decimal
 }
 
 type Ohlcv1h struct {
@@ -310,18 +311,18 @@ type Ohlcv1h struct {
 }
 
 type Order struct {
-	UserID           pgtype.Text
+	UserID           *string
 	Symbol           string
 	Side             OrderSide
 	OrderType        OrderType
-	Quantity         float64
-	LimitPrice       pgtype.Float8
-	StopPrice        pgtype.Float8
+	Quantity         decimal.Decimal
+	LimitPrice       decimal.NullDecimal
+	StopPrice        decimal.NullDecimal
 	ID               string
-	ClientOrderID    pgtype.Text
-	Status           NullOrderStatus
-	FilledQuantity   pgtype.Float8
-	AverageFillPrice pgtype.Float8
+	ClientOrderID    *string
+	Status           *OrderStatus
+	FilledQuantity   decimal.NullDecimal
+	AverageFillPrice decimal.NullDecimal
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
@@ -331,29 +332,29 @@ type User struct {
 	Name          string
 	Email         string
 	EmailVerified bool
-	Image         pgtype.Text
+	Image         *string
 	CreatedAt     pgtype.Timestamp
 	UpdatedAt     pgtype.Timestamp
 }
 
 type Wallet struct {
 	ID              string
-	Owner           pgtype.Text
-	StartingBalance pgtype.Numeric
+	Owner           *string
+	StartingBalance decimal.NullDecimal
 }
 
 type WalletLedgerEntry struct {
-	Wallet      pgtype.Text
+	Wallet      *string
 	Notes       string
 	RecordedAt  pgtype.Timestamptz
-	Transaction pgtype.Text
+	Transaction *string
 }
 
 type WalletSnapshot struct {
 	WalletID          string
-	OwnerID           pgtype.Text
-	StartingBalance   pgtype.Numeric
-	CurrentBalance    pgtype.Numeric
+	OwnerID           *string
+	StartingBalance   decimal.NullDecimal
+	CurrentBalance    decimal.Decimal
 	TotalTransactions int64
 	LastActivityAt    pgtype.Timestamptz
 	SnapshotCreatedAt pgtype.Timestamptz
@@ -362,14 +363,14 @@ type WalletSnapshot struct {
 type WalletTransaction struct {
 	ID               string
 	Type             WalletTransactionType
-	Value            pgtype.Numeric
-	Src              pgtype.Text
-	Dest             pgtype.Text
-	Intent           pgtype.Text
+	Value            decimal.Decimal
+	Src              *string
+	Dest             *string
+	Intent           *string
 	RecordedAt       pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	ExtraData        []byte
 	IdempotencyToken string
-	DoneBy           pgtype.Text
+	DoneBy           *string
 	TracingID        string
 }

@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createCredentialAccount = `-- name: CreateCredentialAccount :one
@@ -33,7 +31,7 @@ type CreateCredentialAccountParams struct {
 	AccountID string
 	Provider  AccountProvider
 	UserID    string
-	Password  pgtype.Text
+	Password  *string
 }
 
 func (q *Queries) CreateCredentialAccount(ctx context.Context, arg CreateCredentialAccountParams) (Account, error) {
@@ -78,7 +76,7 @@ type CreateUserParams struct {
 	ID    string
 	Name  string
 	Email string
-	Image pgtype.Text
+	Image *string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {

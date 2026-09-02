@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const findWalletSnapshotByOwnerId = `-- name: FindWalletSnapshotByOwnerId :one
@@ -22,7 +20,7 @@ LIMIT
     1
 `
 
-func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID pgtype.Text) (WalletSnapshot, error) {
+func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID *string) (WalletSnapshot, error) {
 	row := q.db.QueryRow(ctx, findWalletSnapshotByOwnerId, ownerID)
 	var i WalletSnapshot
 	err := row.Scan(
