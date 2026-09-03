@@ -96,53 +96,6 @@ func (ns NullOrderSide) Value() (driver.Value, error) {
 	return string(ns.OrderSide), nil
 }
 
-type OrderStatus string
-
-const (
-	OrderStatusPending         OrderStatus = "pending"
-	OrderStatusSubmitted       OrderStatus = "submitted"
-	OrderStatusPartiallyFilled OrderStatus = "partially_filled"
-	OrderStatusFilled          OrderStatus = "filled"
-	OrderStatusCancelled       OrderStatus = "cancelled"
-	OrderStatusRejected        OrderStatus = "rejected"
-	OrderStatusExpired         OrderStatus = "expired"
-)
-
-func (e *OrderStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = OrderStatus(s)
-	case string:
-		*e = OrderStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for OrderStatus: %T", src)
-	}
-	return nil
-}
-
-type NullOrderStatus struct {
-	OrderStatus OrderStatus
-	Valid       bool // Valid is true if OrderStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullOrderStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.OrderStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.OrderStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullOrderStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.OrderStatus), nil
-}
-
 type OrderType string
 
 const (
@@ -187,95 +140,8 @@ func (ns NullOrderType) Value() (driver.Value, error) {
 	return string(ns.OrderType), nil
 }
 
-type WalletTransactionStatus string
-
-const (
-	WalletTransactionStatusProcessing WalletTransactionStatus = "processing"
-	WalletTransactionStatusProcessed  WalletTransactionStatus = "processed"
-	WalletTransactionStatusCancelled  WalletTransactionStatus = "cancelled"
-	WalletTransactionStatusFailed     WalletTransactionStatus = "failed"
-)
-
-func (e *WalletTransactionStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = WalletTransactionStatus(s)
-	case string:
-		*e = WalletTransactionStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for WalletTransactionStatus: %T", src)
-	}
-	return nil
-}
-
-type NullWalletTransactionStatus struct {
-	WalletTransactionStatus WalletTransactionStatus
-	Valid                   bool // Valid is true if WalletTransactionStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullWalletTransactionStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.WalletTransactionStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.WalletTransactionStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullWalletTransactionStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.WalletTransactionStatus), nil
-}
-
-type WalletTransactionType string
-
-const (
-	WalletTransactionTypeCredit WalletTransactionType = "credit"
-	WalletTransactionTypeDebit  WalletTransactionType = "debit"
-)
-
-func (e *WalletTransactionType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = WalletTransactionType(s)
-	case string:
-		*e = WalletTransactionType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for WalletTransactionType: %T", src)
-	}
-	return nil
-}
-
-type NullWalletTransactionType struct {
-	WalletTransactionType WalletTransactionType
-	Valid                 bool // Valid is true if WalletTransactionType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullWalletTransactionType) Scan(value interface{}) error {
-	if value == nil {
-		ns.WalletTransactionType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.WalletTransactionType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullWalletTransactionType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.WalletTransactionType), nil
-}
-
 type Account struct {
 	ID                    string
-	Issuer                string
 	AccountID             string
 	Provider              AccountProvider
 	UserID                string
@@ -290,43 +156,6 @@ type Account struct {
 	UpdatedAt             pgtype.Timestamp
 }
 
-type Ohlcv struct {
-	Time   pgtype.Timestamptz
-	Symbol string
-	Open   decimal.Decimal
-	High   decimal.Decimal
-	Low    decimal.Decimal
-	Close  decimal.Decimal
-	Volume decimal.Decimal
-}
-
-type Ohlcv1h struct {
-	Bucket interface{}
-	Symbol string
-	Open   interface{}
-	High   interface{}
-	Low    interface{}
-	Close  interface{}
-	Volume int64
-}
-
-type Order struct {
-	UserID           *string
-	Symbol           string
-	Side             OrderSide
-	OrderType        OrderType
-	Quantity         decimal.Decimal
-	LimitPrice       decimal.NullDecimal
-	StopPrice        decimal.NullDecimal
-	ID               string
-	ClientOrderID    *string
-	Status           *OrderStatus
-	FilledQuantity   decimal.NullDecimal
-	AverageFillPrice decimal.NullDecimal
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-}
-
 type User struct {
 	ID            string
 	Name          string
@@ -337,19 +166,6 @@ type User struct {
 	UpdatedAt     pgtype.Timestamp
 }
 
-type Wallet struct {
-	ID              string
-	Owner           *string
-	StartingBalance decimal.NullDecimal
-}
-
-type WalletLedgerEntry struct {
-	Wallet      *string
-	Notes       string
-	RecordedAt  pgtype.Timestamptz
-	Transaction *string
-}
-
 type WalletSnapshot struct {
 	WalletID          string
 	OwnerID           *string
@@ -358,19 +174,4 @@ type WalletSnapshot struct {
 	TotalTransactions int64
 	LastActivityAt    pgtype.Timestamptz
 	SnapshotCreatedAt pgtype.Timestamptz
-}
-
-type WalletTransaction struct {
-	ID               string
-	Type             WalletTransactionType
-	Value            decimal.Decimal
-	Src              *string
-	Dest             *string
-	Intent           *string
-	RecordedAt       pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	ExtraData        []byte
-	IdempotencyToken string
-	DoneBy           *string
-	TracingID        string
 }

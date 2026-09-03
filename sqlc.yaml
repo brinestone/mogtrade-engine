@@ -9,7 +9,10 @@ sql:
         out: infra/db 
         sql_package: "pgx/v5"
         emit_pointers_for_null_types: true
+        omit_unused_structs: true
         overrides:
+          - db_type: pg_catalog.interval
+            go_type: string
           - db_type: pg_catalog.numeric
             nullable: false
             go_type:

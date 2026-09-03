@@ -11,23 +11,15 @@ import (
 
 const createCredentialAccount = `-- name: CreateCredentialAccount :one
 INSERT INTO
-    account (
-        id,
-        issuer,
-        account_id,
-        provider,
-        user_id,
-        "password"
-    )
+    account (id, account_id, provider, user_id, "password")
 VALUES
-    ($1, $2, $3, $4, $5, $6)
+    ($1, $2, $3, $4, $5)
 RETURNING
-    id, issuer, account_id, provider, user_id, access_token, refresh_token, id_token, access_token_expires_at, refresh_token_expires_at, scope, password, created_at, updated_at
+    id, account_id, provider, user_id, access_token, refresh_token, id_token, access_token_expires_at, refresh_token_expires_at, scope, password, created_at, updated_at
 `
 
 type CreateCredentialAccountParams struct {
 	ID        string
-	Issuer    string
 	AccountID string
 	Provider  AccountProvider
 	UserID    string
@@ -37,7 +29,6 @@ type CreateCredentialAccountParams struct {
 func (q *Queries) CreateCredentialAccount(ctx context.Context, arg CreateCredentialAccountParams) (Account, error) {
 	row := q.db.QueryRow(ctx, createCredentialAccount,
 		arg.ID,
-		arg.Issuer,
 		arg.AccountID,
 		arg.Provider,
 		arg.UserID,
@@ -46,7 +37,6 @@ func (q *Queries) CreateCredentialAccount(ctx context.Context, arg CreateCredent
 	var i Account
 	err := row.Scan(
 		&i.ID,
-		&i.Issuer,
 		&i.AccountID,
 		&i.Provider,
 		&i.UserID,
@@ -61,6 +51,30 @@ func (q *Queries) CreateCredentialAccount(ctx context.Context, arg CreateCredent
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const createRefreshToken = `-- name: CreateRefreshToken :exec
+insert into
+    refresh_tokens (id, user_id, token_hash, valid_window)
+values
+    ($1, $2, $3, $4)
+`
+
+type CreateRefreshTokenParams struct {
+	ID          string
+	UserID      string
+	TokenHash   string
+	ValidWindow string
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, createRefreshToken,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ValidWindow,
+	)
+	return err
 }
 
 const createUser = `-- name: CreateUser :one
@@ -93,6 +107,39 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Email,
 		&i.EmailVerified,
 		&i.Image,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const findCredentialAccountById = `-- name: FindCredentialAccountById :one
+SELECT
+    id, account_id, provider, user_id, access_token, refresh_token, id_token, access_token_expires_at, refresh_token_expires_at, scope, password, created_at, updated_at
+FROM
+    account
+WHERE
+    provider = 'credential'
+    and account_id = $1
+limit
+    1
+`
+
+func (q *Queries) FindCredentialAccountById(ctx context.Context, accountID string) (Account, error) {
+	row := q.db.QueryRow(ctx, findCredentialAccountById, accountID)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.Provider,
+		&i.UserID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.IDToken,
+		&i.AccessTokenExpiresAt,
+		&i.RefreshTokenExpiresAt,
+		&i.Scope,
+		&i.Password,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

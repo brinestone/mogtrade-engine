@@ -73,7 +73,7 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, cg infra.ConnProviderFunc) *Orders {
 	return &Orders{
 		repo:       q,
-		logger:     l,
+		logger:     l.With("controller", "orders"),
 		riskEngine: re,
 		connGetter: cg,
 	}

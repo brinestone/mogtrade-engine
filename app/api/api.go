@@ -11,14 +11,16 @@ import (
 )
 
 func MountApiV1(r *gin.RouterGroup) error {
+	ctx := context.TODO()
 	router := r.Group("/v1")
 
-	oc, err := ioc.Get[*controller.Orders](context.TODO())
-	if err != nil {
-		return err
-	}
+	ioc.Invoke(ctx, func(c *controller.Auth) {
+		c.MountV1(router)
+	})
+	ioc.Invoke(ctx, func(c *controller.Orders) {
+		c.MountV1(router)
+	})
 
-	(*oc).MountV1(router)
 	mountHealth(router)
 	return nil
 }
@@ -40,5 +42,6 @@ func mountHealth(r *gin.RouterGroup) {
 
 func SetupControllers() error {
 	ioc.Factory(controller.NewOrdersController, true)
+	ioc.Factory(controller.NewAuthController, true)
 	return nil
 }

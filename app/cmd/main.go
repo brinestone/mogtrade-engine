@@ -11,10 +11,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/api"
+	"github.com/brinestone/mogtrade/web/contract"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go-slim.dev/ioc"
@@ -40,6 +42,9 @@ func main() {
 		panic(err)
 	}
 	if err := setupServices(); err != nil {
+		panic(err)
+	}
+	if err := setupAdapters(); err != nil {
 		panic(err)
 	}
 	if err := api.SetupControllers(); err != nil {
@@ -144,6 +149,21 @@ func setupDbConnection(ctx context.Context) error {
 			return pool.Acquire(ctx)
 		}
 	})
+	return nil
+}
+
+func setupAdapters() error {
+	ioc.Bind(contract.UlidIdGenerator)
+	err := ioc.Factory(func() encoding.TokenEncoder {
+		lifetime, err := time.ParseDuration(os.Getenv("JWT_LIFETIME"))
+		if err != nil {
+			panic(err)
+		}
+		return contract.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime)
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
