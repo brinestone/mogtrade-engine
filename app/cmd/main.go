@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/api"
@@ -39,6 +40,9 @@ func main() {
 		panic(err)
 	}
 	if err := setupServices(); err != nil {
+		panic(err)
+	}
+	if err := api.SetupControllers(); err != nil {
 		panic(err)
 	}
 
@@ -132,6 +136,14 @@ func setupDbConnection(ctx context.Context) error {
 	ioc.Factory(func(pool *pgxpool.Pool) *db.Queries {
 		return db.New(pool)
 	}, true)
+	ioc.Factory(func(pool *pgxpool.Pool) (*pgxpool.Conn, error) {
+		return pool.Acquire(ctx)
+	})
+	ioc.Factory(func(pool *pgxpool.Pool) infra.ConnProviderFunc {
+		return func(ctx context.Context) (*pgxpool.Conn, error) {
+			return pool.Acquire(ctx)
+		}
+	})
 	return nil
 }
 

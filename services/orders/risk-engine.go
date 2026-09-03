@@ -37,12 +37,11 @@ type RiskCheck interface {
 
 type RiskEngine struct {
 	Logger *slog.Logger
-	checks []RiskCheck
 }
 
 func (re *RiskEngine) ValidateOrder(ctx context.Context, o OrderContext, checks ...RiskCheck) RiskCheckResult {
 	re.Logger.Info("validating order", "sym", o.Symbol, "side", o.Side, "type", o.OrderType, "qty", o.Quantity)
-	for _, check := range re.checks {
+	for _, check := range checks {
 		re.Logger.Debug("evaluating check", "check", check.Name())
 		result := check.Evaluate(ctx, o)
 		if !result.Approved {

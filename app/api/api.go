@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/brinestone/mogtrade/web/controller"
@@ -12,12 +13,12 @@ import (
 func MountApiV1(r *gin.RouterGroup) error {
 	router := r.Group("/v1")
 
-	orders, err := controller.NewOrdersController()
+	oc, err := ioc.Get[*controller.Orders](context.TODO())
 	if err != nil {
 		return err
 	}
 
-	orders.MountV1(router)
+	(*oc).MountV1(router)
 	mountHealth(router)
 	return nil
 }
@@ -38,12 +39,6 @@ func mountHealth(r *gin.RouterGroup) {
 }
 
 func SetupControllers() error {
+	ioc.Factory(controller.NewOrdersController, true)
 	return nil
-	// if err := ioc.Singleton(func(repo *db.Queries) *controller.Orders {
-	// 	orders := controller.Orders{}
-	// 	return &orders
-	// }); err != nil {
-	// 	return err
-	// }
-	// return nil
 }
