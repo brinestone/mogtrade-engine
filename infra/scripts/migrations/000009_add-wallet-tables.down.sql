@@ -1,4 +1,4 @@
-LTER TABLE "wallet_event_ledger"
+ALTER TABLE "wallet_event_ledger"
 DROP CONSTRAINT "wallet_event_ledger_wallet_wallets_id_fk";
 
 DROP INDEX "wallet_event_ledger_transaction_idx";

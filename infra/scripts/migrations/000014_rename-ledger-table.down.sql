@@ -1,0 +1,2 @@
+alter table wallet_ledger_entries
+rename to wallet_event_ledger;

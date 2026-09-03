@@ -1,3 +1,1 @@
-TRUNCATE TABLE user CASCADE;
-
-DROP TABLE user;
+DROP TABLE "user";
