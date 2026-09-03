@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	db2 "database/sql"
+	"database/sql"
 
 	enc "github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra/db"
@@ -18,21 +18,68 @@ type SignInResult struct {
 	RefreshToken string `json:"refreshToken" xml:"refreshtoken"`
 }
 
+type SignUpResult struct {
+	Timestamp       time.Time          `json:"timestamp" xml:"timestamp"`
+	UserId          string             `json:"userId" xml:"user_id"`
+	AccountProvider db.AccountProvider `json:"accountProvider" xml:"account_provider"`
+	AccountId       string             `json:"accountId" xml:"account-id"`
+}
+
 type CredentialSignInInput struct {
 	Identifier           string
 	Password             string
 	RefreshTokenLifetime time.Duration
+	DeviceId             string
+}
+
+type CredentialSignUpInput struct {
+	Name       string
+	Identifier string
+	Password   string
+	Email      string
 }
 
 var (
-	ErrNoAuthAccountFound = errors.New("account not found with provided credentials")
-	ErrInavlidCredentials = errors.New("invalid credentials provided")
+	ErrNoAuthAccountFound   = errors.New("account not found with provided credentials")
+	ErrInavlidCredentials   = errors.New("invalid credentials provided")
+	ErrAccountAlreadyExists = errors.New("an account with the provided credentials already exists")
 )
+
+func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg enc.IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
+	exists, err := q.CredentialAccountExistsByIdentifier(ctx, csi.Identifier)
+	if err != nil {
+		return SignUpResult{}, err
+	}
+
+	if exists {
+		return SignUpResult{}, ErrAccountAlreadyExists
+	}
+
+	userId := idg()
+	accountId := idg()
+	timestamp, err := q.CreateUser(ctx, db.CreateUserParams{ID: userId, Name: csi.Name, Email: csi.Email})
+	if err != nil {
+		return SignUpResult{}, err
+	}
+
+	hash, err := HashPassword(csi.Password)
+	if err != nil {
+		return SignUpResult{}, err
+	}
+	_, err = q.CreateCredentialAccount(ctx, db.CreateCredentialAccountParams{ID: accountId, AccountID: csi.Identifier, Password: &hash, UserID: userId})
+
+	return SignUpResult{
+		Timestamp:       timestamp.Time,
+		UserId:          userId,
+		AccountProvider: db.AccountProviderCredential,
+		AccountId:       accountId,
+	}, nil
+}
 
 func SignInUserByCredentials(ctx context.Context, q *db.Queries, te enc.TokenEncoder, idg enc.IdGeneratorFunc, csi CredentialSignInInput) (SignInResult, error) {
 	account, err := q.FindCredentialAccountById(ctx, csi.Identifier)
 	if err != nil {
-		if errors.Is(err, db2.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return SignInResult{}, ErrNoAuthAccountFound
 		}
 	}
@@ -50,9 +97,11 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te enc.TokenEnc
 	rtSalt, _ := genSalt(20)
 	refreshToken := fmt.Sprintf("%x", sha256.Sum256(append([]byte(accessToken), rtSalt...)))
 
+	q.InvalidateRefreshTokensForDevice(ctx, csi.DeviceId)
 	err = q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		ID:          idg(),
 		UserID:      account.UserID,
+		DeviceID:    csi.DeviceId,
 		TokenHash:   refreshToken,
 		ValidWindow: csi.RefreshTokenLifetime.String(),
 	})

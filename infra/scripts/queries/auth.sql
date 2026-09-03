@@ -1,8 +1,27 @@
+-- name: InvalidateRefreshTokensForDevice :exec
+update refresh_tokens
+set
+    revoked_at = now()
+where
+    device_id = $1;
+
+-- name: CredentialAccountExistsByIdentifier :one
+select
+    exists (
+        select
+            1
+        from
+            account
+        where
+            provider = 'credential'
+            and account_id = $1
+    );
+
 -- name: CreateRefreshToken :exec
 insert into
-    refresh_tokens (id, user_id, token_hash, valid_window)
+    refresh_tokens (id, user_id, token_hash, valid_window, device_id)
 values
-    ($1, $2, $3, $4);
+    ($1, $2, $3, $4, $5);
 
 -- name: FindCredentialAccountById :one
 SELECT
@@ -41,12 +60,12 @@ INSERT INTO
 VALUES
     ($1, $2, $3, $4)
 RETURNING
-    *;
+    created_at;
 
 -- name: CreateCredentialAccount :one
 INSERT INTO
-    account (id, account_id, provider, user_id, "password")
+    account (provider, id, account_id, user_id, "password")
 VALUES
-    ($1, $2, $3, $4, $5)
+    ('credential', $1, $2, $3, $4)
 RETURNING
-    *;
+    created_at;

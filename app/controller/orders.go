@@ -7,7 +7,7 @@ import (
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/services/orders"
-	"github.com/brinestone/mogtrade/web/payloads"
+	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
 	"github.com/oklog/ulid/v2"
 	"github.com/shopspring/decimal"
@@ -21,7 +21,7 @@ type Orders struct {
 }
 
 func (o *Orders) HandlePlaceOrder(ctx *gin.Context) {
-	var payload payloads.PlaceOrderPayload
+	var payload httppayloads.PlaceOrderPayload
 
 	o.logger.Info("handling request to place orders, validating request")
 	if err := ctx.ShouldBind(&payload); err != nil {

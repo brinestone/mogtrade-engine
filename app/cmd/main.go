@@ -153,6 +153,7 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters() error {
+	ioc.Factory(contract.UseInMemoryEventBus, true)
 	ioc.Bind(contract.UlidIdGenerator)
 	err := ioc.Factory(func() encoding.TokenEncoder {
 		lifetime, err := time.ParseDuration(os.Getenv("JWT_LIFETIME"))

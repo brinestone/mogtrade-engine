@@ -1,4 +1,4 @@
-package payloads
+package httppayloads
 
 import (
 	"github.com/brinestone/mogtrade/infra/db"

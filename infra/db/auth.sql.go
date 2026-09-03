@@ -7,57 +7,43 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createCredentialAccount = `-- name: CreateCredentialAccount :one
 INSERT INTO
-    account (id, account_id, provider, user_id, "password")
+    account (provider, id, account_id, user_id, "password")
 VALUES
-    ($1, $2, $3, $4, $5)
+    ('credential', $1, $2, $3, $4)
 RETURNING
-    id, account_id, provider, user_id, access_token, refresh_token, id_token, access_token_expires_at, refresh_token_expires_at, scope, password, created_at, updated_at
+    created_at
 `
 
 type CreateCredentialAccountParams struct {
 	ID        string
 	AccountID string
-	Provider  AccountProvider
 	UserID    string
 	Password  *string
 }
 
-func (q *Queries) CreateCredentialAccount(ctx context.Context, arg CreateCredentialAccountParams) (Account, error) {
+func (q *Queries) CreateCredentialAccount(ctx context.Context, arg CreateCredentialAccountParams) (pgtype.Timestamp, error) {
 	row := q.db.QueryRow(ctx, createCredentialAccount,
 		arg.ID,
 		arg.AccountID,
-		arg.Provider,
 		arg.UserID,
 		arg.Password,
 	)
-	var i Account
-	err := row.Scan(
-		&i.ID,
-		&i.AccountID,
-		&i.Provider,
-		&i.UserID,
-		&i.AccessToken,
-		&i.RefreshToken,
-		&i.IDToken,
-		&i.AccessTokenExpiresAt,
-		&i.RefreshTokenExpiresAt,
-		&i.Scope,
-		&i.Password,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	var created_at pgtype.Timestamp
+	err := row.Scan(&created_at)
+	return created_at, err
 }
 
 const createRefreshToken = `-- name: CreateRefreshToken :exec
 insert into
-    refresh_tokens (id, user_id, token_hash, valid_window)
+    refresh_tokens (id, user_id, token_hash, valid_window, device_id)
 values
-    ($1, $2, $3, $4)
+    ($1, $2, $3, $4, $5)
 `
 
 type CreateRefreshTokenParams struct {
@@ -65,6 +51,7 @@ type CreateRefreshTokenParams struct {
 	UserID      string
 	TokenHash   string
 	ValidWindow string
+	DeviceID    string
 }
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
@@ -73,6 +60,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 		arg.UserID,
 		arg.TokenHash,
 		arg.ValidWindow,
+		arg.DeviceID,
 	)
 	return err
 }
@@ -83,7 +71,7 @@ INSERT INTO
 VALUES
     ($1, $2, $3, $4)
 RETURNING
-    id, name, email, email_verified, image, created_at, updated_at
+    created_at
 `
 
 type CreateUserParams struct {
@@ -93,24 +81,36 @@ type CreateUserParams struct {
 	Image *string
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (pgtype.Timestamp, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.ID,
 		arg.Name,
 		arg.Email,
 		arg.Image,
 	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.EmailVerified,
-		&i.Image,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	var created_at pgtype.Timestamp
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
+const credentialAccountExistsByIdentifier = `-- name: CredentialAccountExistsByIdentifier :one
+select
+    exists (
+        select
+            1
+        from
+            account
+        where
+            provider = 'credential'
+            and account_id = $1
+    )
+`
+
+func (q *Queries) CredentialAccountExistsByIdentifier(ctx context.Context, accountID string) (bool, error) {
+	row := q.db.QueryRow(ctx, credentialAccountExistsByIdentifier, accountID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const findCredentialAccountById = `-- name: FindCredentialAccountById :one
@@ -196,4 +196,17 @@ func (q *Queries) FindUserById(ctx context.Context, id string) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const invalidateRefreshTokensForDevice = `-- name: InvalidateRefreshTokensForDevice :exec
+update refresh_tokens
+set
+    revoked_at = now()
+where
+    device_id = $1
+`
+
+func (q *Queries) InvalidateRefreshTokensForDevice(ctx context.Context, deviceID string) error {
+	_, err := q.db.Exec(ctx, invalidateRefreshTokensForDevice, deviceID)
+	return err
 }
