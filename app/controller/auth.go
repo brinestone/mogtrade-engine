@@ -12,6 +12,7 @@ import (
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/web/payloads"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go-slim.dev/ioc"
 )
 
@@ -30,13 +31,26 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(q *db.Queries, te encoding.TokenEncoder, idg encoding.IdGeneratorFunc) (auth.SignInResult, error) {
+	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te encoding.TokenEncoder, idg encoding.IdGeneratorFunc) (auth.SignInResult, error) {
 		a.logger.Debug("validation successful, signing in user", "identifier", request.Username, "type", "credential")
-		return auth.SignInUserByCredentials(c.Request.Context(), q, te, idg, auth.CredentialSignInInput{
+		tx, err := p.Begin(c.Request.Context())
+		if err != nil {
+			a.logger.Error("unable to open transaction, aborting")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, errInternalServerErrorPayload)
+			return auth.SignInResult{}, err
+		}
+		defer tx.Commit(c.Request.Context())
+
+		result, err := auth.SignInUserByCredentials(c.Request.Context(), q.WithTx(tx), te, idg, auth.CredentialSignInInput{
 			Identifier:           request.Username,
 			Password:             request.Password,
 			RefreshTokenLifetime: 5 * time.Hour,
 		})
+		if err != nil {
+			tx.Rollback(c.Request.Context())
+			return auth.SignInResult{}, err
+		}
+		return result, nil
 	})
 	if err != nil {
 		if errors.Is(err, auth.ErrInavlidCredentials) || errors.Is(err, auth.ErrNoAuthAccountFound) {
