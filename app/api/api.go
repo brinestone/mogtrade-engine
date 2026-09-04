@@ -19,6 +19,9 @@ func MountApiV1(r *gin.RouterGroup) error {
 	ioc.Invoke(ctx, func(c *controller.Orders) {
 		c.MountV1(router)
 	})
+	ioc.Invoke(ctx, func(c *controller.Wallets) {
+		c.MountV1(router)
+	})
 
 	mountHealth(router)
 	return nil
@@ -33,5 +36,6 @@ func mountHealth(r *gin.RouterGroup) {
 func SetupControllers() error {
 	ioc.Factory(controller.NewOrdersController, true)
 	ioc.Factory(controller.NewAuthController, true)
+	ioc.Factory(controller.NewWalletsController, true)
 	return nil
 }

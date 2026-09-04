@@ -14,6 +14,7 @@ import (
 	"github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/api"
 	"github.com/brinestone/mogtrade/web/contract"
@@ -44,7 +45,7 @@ func main() {
 	if err := setupServices(); err != nil {
 		panic(err)
 	}
-	if err := setupAdapters(); err != nil {
+	if err := setupAdapters(ctx); err != nil {
 		panic(err)
 	}
 	if err := api.SetupControllers(); err != nil {
@@ -152,8 +153,10 @@ func setupDbConnection(ctx context.Context) error {
 	return nil
 }
 
-func setupAdapters() error {
-	ioc.Factory(contract.UseInMemoryEventBus, true)
+func setupAdapters(ctx context.Context) error {
+	ioc.Factory(func() events.EventBus {
+		return contract.UseInMemoryEventBus(ctx)
+	}, true)
 	ioc.Bind(contract.UlidIdGenerator)
 	err := ioc.Factory(func() encoding.TokenEncoder {
 		lifetime, err := time.ParseDuration(os.Getenv("JWT_LIFETIME"))

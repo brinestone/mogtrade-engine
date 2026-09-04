@@ -26,7 +26,7 @@ type Auth struct {
 }
 
 const (
-	EventKeyUserCreated = "user.created"
+	EventKeyUserCreatedV1 = "user.created.v1"
 )
 
 func (a *Auth) handleCredentialLogin(c *gin.Context) {
@@ -121,7 +121,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 	}
 
 	_, err = ioc.Invoke(c.Request.Context(), func(bus events.EventBus) {
-		bus.Publish(EventKeyUserCreated, eventpayloads.UserCreatedEventArgs{
+		bus.Publish(EventKeyUserCreatedV1, eventpayloads.UserCreatedEventArgs{
 			UserId:    result.UserId,
 			Timestamp: result.Timestamp,
 		})

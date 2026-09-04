@@ -20,7 +20,7 @@ type Orders struct {
 	connGetter infra.ConnProviderFunc
 }
 
-func (o *Orders) HandlePlaceOrder(ctx *gin.Context) {
+func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 	var payload httppayloads.PlaceOrderPayload
 
 	o.logger.Info("handling request to place orders, validating request")
@@ -67,7 +67,7 @@ func (o *Orders) HandlePlaceOrder(ctx *gin.Context) {
 
 func (c *Orders) MountV1(r *gin.RouterGroup) {
 	router := r.Group("/orders")
-	router.POST("", c.HandlePlaceOrder)
+	router.POST("", c.handlePlaceOrder)
 }
 
 func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, cg infra.ConnProviderFunc) *Orders {

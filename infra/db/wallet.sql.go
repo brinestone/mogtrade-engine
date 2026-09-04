@@ -7,7 +7,27 @@ package db
 
 import (
 	"context"
+
+	decimal "github.com/shopspring/decimal"
 )
+
+const createWalletForUser = `-- name: CreateWalletForUser :exec
+insert into
+    wallets (id, "owner", starting_balance)
+values
+    ($1, $2, $3)
+`
+
+type CreateWalletForUserParams struct {
+	ID              string
+	Owner           *string
+	StartingBalance decimal.NullDecimal
+}
+
+func (q *Queries) CreateWalletForUser(ctx context.Context, arg CreateWalletForUserParams) error {
+	_, err := q.db.Exec(ctx, createWalletForUser, arg.ID, arg.Owner, arg.StartingBalance)
+	return err
+}
 
 const findWalletSnapshotByOwnerId = `-- name: FindWalletSnapshotByOwnerId :one
 SELECT
@@ -33,4 +53,23 @@ func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID *stri
 		&i.SnapshotCreatedAt,
 	)
 	return i, err
+}
+
+const userHasWallet = `-- name: UserHasWallet :one
+select
+    exists (
+        select
+            1
+        from
+            wallets
+        where
+            "owner" = $1
+    )
+`
+
+func (q *Queries) UserHasWallet(ctx context.Context, owner *string) (bool, error) {
+	row := q.db.QueryRow(ctx, userHasWallet, owner)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
