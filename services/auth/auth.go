@@ -9,6 +9,7 @@ import (
 
 	"database/sql"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
 )
 
@@ -20,8 +21,6 @@ type IdCallbackFunc func(string)
 type TokenVerifier interface {
 	VerifyToken(string, IdCallbackFunc) (bool, error)
 }
-
-type IdGeneratorFunc func() string
 
 type SignInResult struct {
 	AccessToken  string `json:"accessToken" xml:"accestoken"`
@@ -64,7 +63,7 @@ var (
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 )
 
-func RotateAccessToken(ctx context.Context, q *db.Queries, idg IdGeneratorFunc, te TokenEncoder, r RotateAccessTokenInput) (SignInResult, error) {
+func RotateAccessToken(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, te TokenEncoder, r RotateAccessTokenInput) (SignInResult, error) {
 	row, err := q.LookupRefreshTokenByDevice(ctx, db.LookupRefreshTokenByDeviceParams{DeviceID: r.DeviceId, TokenHash: r.Hash})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -105,7 +104,7 @@ func RotateAccessToken(ctx context.Context, q *db.Queries, idg IdGeneratorFunc, 
 	return SignInResult{AccessToken: newAccessToken, RefreshToken: newRefresh}, nil
 }
 
-func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
+func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
 	exists, err := q.CredentialAccountExistsByIdentifier(ctx, csi.Identifier)
 	if err != nil {
 		return SignUpResult{}, err
@@ -136,7 +135,7 @@ func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg IdGenerator
 	}, nil
 }
 
-func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder, idg IdGeneratorFunc, csi CredentialSignInInput) (SignInResult, error) {
+func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder, idg contract.IdGeneratorFunc, csi CredentialSignInInput) (SignInResult, error) {
 	account, err := q.FindCredentialAccountById(ctx, csi.Identifier)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

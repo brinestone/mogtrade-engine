@@ -9,7 +9,7 @@ import (
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/billing"
-	"github.com/brinestone/mogtrade/web/contract"
+	adapter "github.com/brinestone/mogtrade/web/adapters"
 	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	"github.com/gin-gonic/gin"
@@ -37,7 +37,7 @@ func (w *Wallets) onUserCreated(ctx context.Context, key string, e eventpayloads
 	}
 	defer tx.Rollback(timedC)
 
-	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), contract.UlidIdGenerator, e.UserId)
+	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), adapter.UlidIdGenerator, e.UserId)
 	if err == nil {
 		tx.Commit(timedC)
 		l.Info("wallet created successfully")

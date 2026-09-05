@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
@@ -49,7 +50,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te auth.TokenEncoder, idg auth.IdGeneratorFunc) (auth.SignInResult, error) {
+	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te auth.TokenEncoder, idg contract.IdGeneratorFunc) (auth.SignInResult, error) {
 		a.logger.Debug("validation successful, signing in user", "identifier", request.Username, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
@@ -98,7 +99,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
 		return
 	}
-	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg auth.IdGeneratorFunc) (auth.SignUpResult, error) {
+	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc) (auth.SignUpResult, error) {
 		a.logger.Debug("validation successful, creating user", "identifier", request.Email, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
@@ -151,7 +152,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 		return
 	}
 
-	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg auth.IdGeneratorFunc, t auth.TokenEncoder) (auth.SignInResult, error) {
+	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc, t auth.TokenEncoder) (auth.SignInResult, error) {
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
 			a.logger.Error("error while opening transaction", "err", err.Error())

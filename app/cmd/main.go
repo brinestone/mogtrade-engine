@@ -20,8 +20,8 @@ import (
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/orders"
+	adapter "github.com/brinestone/mogtrade/web/adapters"
 	"github.com/brinestone/mogtrade/web/api"
-	"github.com/brinestone/mogtrade/web/contract"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -170,10 +170,10 @@ func setupDbConnection(ctx context.Context) error {
 
 func setupAdapters(ctx context.Context) error {
 	ioc.Factory(func() events.EventBus {
-		return contract.UseInMemoryEventBus(ctx)
+		return adapter.UseInMemoryEventBus(ctx)
 	}, true)
-	ioc.Bind(contract.UlidIdGenerator)
-	ioc.Factory(func() *contract.JwtAdapter {
+	ioc.Bind(adapter.UlidIdGenerator)
+	ioc.Factory(func() *adapter.JwtAdapter {
 		lifetime, err := time.ParseDuration(os.Getenv("JWT_LIFETIME"))
 		if err != nil {
 			panic(err)
@@ -186,12 +186,12 @@ func setupAdapters(ctx context.Context) error {
 				hosts = append(hosts, u.Host)
 			}
 		}
-		return contract.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime, hosts, os.Getenv("HOST"))
+		return adapter.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime, hosts, os.Getenv("HOST"))
 	})
-	ioc.Factory(func(j *contract.JwtAdapter) auth.TokenEncoder {
+	ioc.Factory(func(j *adapter.JwtAdapter) auth.TokenEncoder {
 		return j
 	})
-	ioc.Factory(func(j *contract.JwtAdapter) auth.TokenVerifier { return j })
+	ioc.Factory(func(j *adapter.JwtAdapter) auth.TokenVerifier { return j })
 	return nil
 }
 
