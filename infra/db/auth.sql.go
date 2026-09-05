@@ -204,9 +204,40 @@ set
     revoked_at = now()
 where
     device_id = $1
+    and revoked_at is null
 `
 
 func (q *Queries) InvalidateRefreshTokensForDevice(ctx context.Context, deviceID string) error {
 	_, err := q.db.Exec(ctx, invalidateRefreshTokensForDevice, deviceID)
 	return err
+}
+
+const lookupRefreshTokenByDevice = `-- name: LookupRefreshTokenByDevice :one
+select
+    rts.user_id,
+    rts.usable
+from
+    refresh_token_states rts
+where
+    rts.device_id = $1
+    and token_hash = $2
+limit
+    1
+`
+
+type LookupRefreshTokenByDeviceParams struct {
+	DeviceID  string
+	TokenHash string
+}
+
+type LookupRefreshTokenByDeviceRow struct {
+	UserID string
+	Usable *bool
+}
+
+func (q *Queries) LookupRefreshTokenByDevice(ctx context.Context, arg LookupRefreshTokenByDeviceParams) (LookupRefreshTokenByDeviceRow, error) {
+	row := q.db.QueryRow(ctx, lookupRefreshTokenByDevice, arg.DeviceID, arg.TokenHash)
+	var i LookupRefreshTokenByDeviceRow
+	err := row.Scan(&i.UserID, &i.Usable)
+	return i, err
 }

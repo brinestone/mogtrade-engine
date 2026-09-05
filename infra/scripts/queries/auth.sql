@@ -1,9 +1,22 @@
+-- name: LookupRefreshTokenByDevice :one
+select
+    rts.user_id,
+    rts.usable
+from
+    refresh_token_states rts
+where
+    rts.device_id = $1
+    and token_hash = $2
+limit
+    1;
+
 -- name: InvalidateRefreshTokensForDevice :exec
 update refresh_tokens
 set
     revoked_at = now()
 where
-    device_id = $1;
+    device_id = $1
+    and revoked_at is null;
 
 -- name: CredentialAccountExistsByIdentifier :one
 select

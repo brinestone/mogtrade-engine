@@ -3,7 +3,7 @@ package contract
 import (
 	"time"
 
-	"github.com/brinestone/mogtrade/core/encoding"
+	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -19,7 +19,7 @@ type AppClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (e *JwtAdapter) VerifyToken(token string, g encoding.IdCallbackFunc) (bool, error) {
+func (e *JwtAdapter) VerifyToken(token string, g auth.IdCallbackFunc) (bool, error) {
 	t, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
 		return e.secret, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}), jwt.WithExpirationRequired(), jwt.WithAudience(e.audiences...))

@@ -9,9 +9,19 @@ import (
 
 	"database/sql"
 
-	enc "github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra/db"
 )
+
+type TokenEncoder interface {
+	EncodeWithClaims(map[string]any, string) (string, error)
+}
+
+type IdCallbackFunc func(string)
+type TokenVerifier interface {
+	VerifyToken(string, IdCallbackFunc) (bool, error)
+}
+
+type IdGeneratorFunc func() string
 
 type SignInResult struct {
 	AccessToken  string `json:"accessToken" xml:"accestoken"`
@@ -39,13 +49,63 @@ type CredentialSignUpInput struct {
 	Email      string
 }
 
+type RotateAccessTokenInput struct {
+	Lifetime time.Duration
+	DeviceId string
+	Hash     string
+}
+
 var (
 	ErrNoAuthAccountFound   = errors.New("account not found with provided credentials")
 	ErrInavlidCredentials   = errors.New("invalid credentials provided")
 	ErrAccountAlreadyExists = errors.New("an account with the provided credentials already exists")
+	ErrRefreshTokenUnusable = errors.New("the provided refreshtoken has been revoked or expired")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 )
 
-func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg enc.IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
+func RotateAccessToken(ctx context.Context, q *db.Queries, idg IdGeneratorFunc, te TokenEncoder, r RotateAccessTokenInput) (SignInResult, error) {
+	row, err := q.LookupRefreshTokenByDevice(ctx, db.LookupRefreshTokenByDeviceParams{DeviceID: r.DeviceId, TokenHash: r.Hash})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SignInResult{}, ErrRefreshTokenNotFound
+		}
+		return SignInResult{}, err
+	}
+
+	if row.Usable == nil || !*row.Usable {
+		return SignInResult{}, ErrRefreshTokenUnusable
+	}
+
+	user, err := q.FindUserById(ctx, row.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SignInResult{}, ErrUserNotFound
+		}
+		return SignInResult{}, err
+	}
+
+	newAccessToken, newRefresh, err := generateAuthTokenPairs(user, te)
+	if err != nil {
+		return SignInResult{}, err
+	}
+
+	q.InvalidateRefreshTokensForDevice(ctx, r.DeviceId)
+	err = q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
+		ID:          idg(),
+		UserID:      row.UserID,
+		DeviceID:    r.DeviceId,
+		TokenHash:   newRefresh,
+		ValidWindow: r.Lifetime.String(),
+	})
+	if err != nil {
+		return SignInResult{}, err
+	}
+
+	return SignInResult{AccessToken: newAccessToken, RefreshToken: newRefresh}, nil
+}
+
+func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
 	exists, err := q.CredentialAccountExistsByIdentifier(ctx, csi.Identifier)
 	if err != nil {
 		return SignUpResult{}, err
@@ -76,7 +136,7 @@ func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg enc.IdGener
 	}, nil
 }
 
-func SignInUserByCredentials(ctx context.Context, q *db.Queries, te enc.TokenEncoder, idg enc.IdGeneratorFunc, csi CredentialSignInInput) (SignInResult, error) {
+func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder, idg IdGeneratorFunc, csi CredentialSignInInput) (SignInResult, error) {
 	account, err := q.FindCredentialAccountById(ctx, csi.Identifier)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -89,14 +149,10 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te enc.TokenEnc
 	}
 
 	user, _ := q.FindUserById(ctx, account.UserID)
-	accessToken, err := te.EncodeWithClaims(getUserClaims(&user), user.ID)
+	accessToken, refreshToken, err := generateAuthTokenPairs(user, te)
 	if err != nil {
 		return SignInResult{}, err
 	}
-
-	rtSalt, _ := genSalt(20)
-	refreshToken := fmt.Sprintf("%x", sha256.Sum256(append([]byte(accessToken), rtSalt...)))
-
 	q.InvalidateRefreshTokensForDevice(ctx, csi.DeviceId)
 	err = q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		ID:          idg(),
@@ -110,6 +166,16 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te enc.TokenEnc
 	}
 
 	return SignInResult{AccessToken: accessToken, RefreshToken: refreshToken}, nil
+}
+
+func generateAuthTokenPairs(u db.User, te TokenEncoder) (string, string, error) {
+	accessToken, err := te.EncodeWithClaims(getUserClaims(&u), u.ID)
+	if err != nil {
+		return "", "", err
+	}
+	rtSalt, _ := genSalt(20)
+	refreshToken := fmt.Sprintf("%x", sha256.Sum256(append([]byte(accessToken), rtSalt...)))
+	return accessToken, refreshToken, nil
 }
 
 func getUserClaims(u *db.User) map[string]any {

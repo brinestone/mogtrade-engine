@@ -15,10 +15,10 @@ import (
 
 	"github.com/gin-contrib/sessions/redis"
 
-	"github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
+	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/api"
 	"github.com/brinestone/mogtrade/web/contract"
@@ -188,10 +188,10 @@ func setupAdapters(ctx context.Context) error {
 		}
 		return contract.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime, hosts, os.Getenv("HOST"))
 	})
-	ioc.Factory(func(j *contract.JwtAdapter) encoding.TokenEncoder {
+	ioc.Factory(func(j *contract.JwtAdapter) auth.TokenEncoder {
 		return j
 	})
-	ioc.Factory(func(j *contract.JwtAdapter) encoding.TokenVerifier { return j })
+	ioc.Factory(func(j *contract.JwtAdapter) auth.TokenVerifier { return j })
 	return nil
 }
 

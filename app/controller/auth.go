@@ -4,14 +4,15 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/auth"
+	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
@@ -20,13 +21,16 @@ import (
 )
 
 type Auth struct {
-	repo       *db.Queries
-	logger     *slog.Logger
-	connGetter infra.ConnProviderFunc
+	repo            *db.Queries
+	logger          *slog.Logger
+	connGetter      infra.ConnProviderFunc
+	refreshLifetime time.Duration
 }
 
 const (
-	EventKeyUserCreatedV1 = "user.created.v1"
+	EventKeyUserCreatedV1        = "user.created.v1"
+	EventKeyUserSignedInV1       = "user.login.v1"
+	EventKeyRefreshTokenRotateV1 = "tokens.refresh.rotate.v1"
 )
 
 func (a *Auth) handleCredentialLogin(c *gin.Context) {
@@ -45,7 +49,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te encoding.TokenEncoder, idg encoding.IdGeneratorFunc) (auth.SignInResult, error) {
+	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te auth.TokenEncoder, idg auth.IdGeneratorFunc) (auth.SignInResult, error) {
 		a.logger.Debug("validation successful, signing in user", "identifier", request.Username, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
@@ -59,7 +63,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 			Identifier:           request.Username,
 			Password:             request.Password,
 			DeviceId:             request.DeviceId,
-			RefreshTokenLifetime: 7 * 24 * time.Hour,
+			RefreshTokenLifetime: a.refreshLifetime,
 		})
 		if err != nil {
 			tx.Rollback(c.Request.Context())
@@ -77,8 +81,13 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	a.logger.Info("sign in successful")
 	c.JSON(http.StatusOK, result)
+	a.logger.Info("sign in successful, emitting event")
+	helpers.PublishEvent(c.Request.Context(), EventKeyUserSignedInV1, eventpayloads.UserSignedInEventArgs{
+		Timestamp:  time.Now().UTC(),
+		Identifier: request.Username,
+		Provider:   db.AccountProviderCredential,
+	})
 }
 
 func (a *Auth) handleCredentialRegister(c *gin.Context) {
@@ -89,7 +98,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
 		return
 	}
-	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg encoding.IdGeneratorFunc) (auth.SignUpResult, error) {
+	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg auth.IdGeneratorFunc) (auth.SignUpResult, error) {
 		a.logger.Debug("validation successful, creating user", "identifier", request.Email, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
@@ -132,14 +141,64 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
+	a.logger.Info("handling token refresh request, validating")
+	var req httppayloads.RotateRefreshTokenRequest
+	err := c.ShouldBindHeader(&req)
+	if err != nil {
+		a.logger.Warn("validation failed, aborting")
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
+		return
+	}
+
+	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg auth.IdGeneratorFunc, t auth.TokenEncoder) (auth.SignInResult, error) {
+		tx, err := p.Begin(c.Request.Context())
+		if err != nil {
+			a.logger.Error("error while opening transaction", "err", err.Error())
+			return auth.SignInResult{}, err
+		}
+		defer tx.Rollback(c.Request.Context())
+
+		sResult, err := auth.RotateAccessToken(c.Request.Context(), q.WithTx(tx), idg, t, auth.RotateAccessTokenInput{
+			Lifetime: a.refreshLifetime,
+			DeviceId: req.Deviceid,
+			Hash:     req.RefreshToken,
+		})
+
+		tx.Commit(c.Request.Context())
+
+		return sResult, err
+	})
+	if err != nil {
+		if errors.Is(err, auth.ErrRefreshTokenUnusable) || errors.Is(err, auth.ErrUserNotFound) || errors.Is(err, auth.ErrRefreshTokenNotFound) {
+			a.logger.Warn("token error", "err", err.Error())
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		a.logger.Error("error while rotating access token", "err", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		return
+	}
+
+	helpers.PublishEvent(c.Request.Context(), EventKeyRefreshTokenRotateV1, nil) // TODO: make an event arg for this
+	c.JSON(http.StatusOK, result)
+}
+
 func (a *Auth) MountV1(r *gin.RouterGroup) {
 	router := r.Group("/auth")
 	router.POST("/login/credential", a.handleCredentialLogin)
 	router.POST("/register/credential", a.handleCredentialRegister)
+	router.GET("/refresh", a.handleAccessTokenRefresh)
 }
 
 func NewAuthController(l *slog.Logger, q *db.Queries, cg infra.ConnProviderFunc) *Auth {
+	var lifetime time.Duration
+	lifetime, err := time.ParseDuration(os.Getenv("REFRESH_LIFETIME"))
+	if err != nil {
+		l.Warn("error while parsing refresh token lifetime environment variable, falling back to default", "var", "REFRESH_LIFETIME")
+		lifetime = 7 * 24 * time.Hour
+	}
 	return &Auth{
-		q, l.With("controller", "auth"), cg,
+		q, l.With("controller", "auth"), cg, lifetime,
 	}
 }

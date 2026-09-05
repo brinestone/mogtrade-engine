@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/brinestone/mogtrade/core/encoding"
+	"github.com/brinestone/mogtrade/services/auth"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func RequireAuth(l *slog.Logger, v encoding.TokenVerifier) gin.HandlerFunc {
+func RequireAuth(l *slog.Logger, v auth.TokenVerifier) gin.HandlerFunc {
 	l2 := l.With("midddleware", "auth-jwt")
 	return func(c *gin.Context) {
 		authHeaderValue, found := c.Request.Header["Authorization"]

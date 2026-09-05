@@ -21,3 +21,8 @@ type CredentialSignUpRequest struct {
 	Password        string `json:"password" form:"password" binding:"required,min=6,max=100"`
 	ConfirmPassword string `json:"confirmPassword" form:"confirmPassword" binding:"required,eqfield=Password"`
 }
+
+type RotateRefreshTokenRequest struct {
+	RefreshToken string `header:"x-refresh-token" binding:"required"`
+	Deviceid     string `header:"x-device-id" binding:"required"`
+}
