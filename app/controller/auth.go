@@ -143,7 +143,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 }
 
 func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
-	a.logger.Info("handling token refresh request, validating")
+	a.logger.Info("handling token refresh request, validating payload")
 	var req httppayloads.RotateRefreshTokenRequest
 	err := c.ShouldBindHeader(&req)
 	if err != nil {
@@ -155,7 +155,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc, t auth.TokenEncoder) (auth.SignInResult, error) {
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
-			a.logger.Error("error while opening transaction", "err", err.Error())
+			a.logger.Error("could not open database transaction", "err", err.Error())
 			return auth.SignInResult{}, err
 		}
 		defer tx.Rollback(c.Request.Context())
@@ -167,7 +167,6 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 		})
 
 		tx.Commit(c.Request.Context())
-
 		return sResult, err
 	})
 	if err != nil {
@@ -182,6 +181,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 	}
 
 	helpers.PublishEvent(c.Request.Context(), EventKeyRefreshTokenRotateV1, nil) // TODO: make an event arg for this
+	a.logger.Info("refresh token rotated successfully!")
 	c.JSON(http.StatusOK, result)
 }
 
