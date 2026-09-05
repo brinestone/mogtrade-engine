@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/sessions/redis"
@@ -36,7 +38,7 @@ var (
 
 func main() {
 	godotenv.Load()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	// 1. Set up logging first and let it inject dependencies
@@ -68,6 +70,12 @@ func main() {
 		panic(err)
 	}
 	go startJobScheduler(ctx)
+	go func() {
+		<-ctx.Done()
+		ioc.Invoke(context.TODO(), func(l *slog.Logger) {
+			l.Info("shutting down...")
+		})
+	}()
 	engine := gin.Default()
 	baseRouter := engine.Group("/api")
 	if err := api.MountApiV1(baseRouter, api.ApiConfig{
@@ -177,7 +185,7 @@ func setupDbConnection(ctx context.Context) error {
 func setupAdapters(ctx context.Context) error {
 	ioc.Factory(func(l *slog.Logger) contract.JobScheduler {
 		return adapter.NewCronJobScheduler(ctx, l.With("service", "job-scheduler"))
-	})
+	}, true)
 	ioc.Factory(func() events.EventBus {
 		return adapter.UseInMemoryEventBus(ctx)
 	}, true)
@@ -220,9 +228,9 @@ func startJobScheduler(ctx context.Context) {
 }
 func registerBackgroundJobs(ctx context.Context) error {
 	_, err := ioc.Invoke(ctx, func(s contract.JobScheduler, pool *pgxpool.Pool, l *slog.Logger) error {
-		err := s.RegisterJob(jobs.NewStaleTokenRemoverJob("0 0 * * 7", pool, l)) // Every sunday midnight
+		err := s.RegisterJob(jobs.NewStaleTokenRemoverJob("0 0 * * 6", pool, l)) // Every sunday midnight
 		if err != nil {
-			return err
+			panic(err)
 		}
 		return nil
 	})

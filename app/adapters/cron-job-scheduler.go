@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"regexp"
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/robfig/cron/v3"
 )
 
-const expressionPattern = `^(?:[1-5]?\d|\*|\*(?:\/[1-5]?\d)?|(?:[1-5]?\d)-(?:[1-5]?\d)(?:\/[1-5]?\d)?)(?:,(?:[1-5]?\d|\*(?:\/[1-5]?\d)?|(?:[1-5]?\d)-(?:[1-5]?\d)(?:\/[1-5]?\d)?))*\s+(?:[1-2]?\d|\*|\*(?:\/[1-2]?\d)?|(?:[1-2]?\d)-(?:[1-2]?\d)(?:\/[1-2]?\d)?)(?:,(?:[1-2]?\d|\*(?:\/[1-2]?\d)?|(?:[1-2]?\d)-(?:[1-2]?\d)(?:\/[1-2]?\d)?))*\s+(?:[1-3]?\d|\*|\*(?:\/[1-3]?\d)?|(?:[1-3]?\d)-(?:[1-3]?\d)(?:\/[1-3]?\d)?)(?:,(?:[1-3]?\d|\*(?:\/[1-3]?\d)?|(?:[1-3]?\d)-(?:[1-3]?\d)(?:\/[1-3]?\d)?))*\s+(?:1[0-2]|\d|\*|\*(?:\/1[0-2]|\/\d)?|(?:1[0-2]|\d)-(?:1[0-2]|\d)(?:\/1[0-2]|\/\d)?)(?:,(?:1[0-2]|\d|\*(?:\/1[0-2]|\/\d)?|(?:1[0-2]|\d)-(?:1[0-2]|\d)(?:\/1[0-2]|\/\d)?))*\s+(?:[0-7]|\*|\*(?:\/[0-7])?|(?:[0-7])-(?:[0-7])(?:\/[0-7])?)(?:,(?:[0-7]|\*|\*(?:\/[0-7])?|(?:[0-7])-(?:[0-7])(?:\/[0-7])?))*$`
-
+var cronParser = cron.NewParser(
+	cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+)
 var (
 	ErrInvalidCronPattern = errors.New("invalid crontab value")
 )
@@ -37,10 +37,11 @@ func (c *CronJobScheduler) RegisterJob(j contract.Job) error {
 	if !ok {
 		return ErrInvalidCronPattern
 	}
-	ok, _ = regexp.MatchString(expressionPattern, schedule)
-	if ok {
-		c.jobs = append(c.jobs, j)
+	if _, err := cronParser.Parse(schedule); err != nil {
+		c.logger.Error("invalid cron schedule", "job", j.Name(), "schedule", schedule, "err", err)
+		return ErrInvalidCronPattern
 	}
+	c.jobs = append(c.jobs, j)
 	return nil
 }
 

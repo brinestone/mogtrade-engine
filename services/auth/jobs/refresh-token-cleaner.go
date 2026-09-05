@@ -23,11 +23,7 @@ func (j *refreshTokenRemoverJob) Run(ctx context.Context) error {
 		j.logger.Error("could not open transaction", "err", err.Error())
 		return err
 	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil {
-			j.logger.Error("could not rollback transaction", "err", err.Error())
-		}
-	}()
+	defer tx.Rollback(ctx)
 
 	q := db.New(tx)
 	err = q.RemoveStaleRefreshTokens(ctx)
