@@ -89,7 +89,7 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te enc.TokenEnc
 	}
 
 	user, _ := q.FindUserById(ctx, account.UserID)
-	accessToken, err := te.EncodeWithClaims(getUserClaims(&user))
+	accessToken, err := te.EncodeWithClaims(getUserClaims(&user), user.ID)
 	if err != nil {
 		return SignInResult{}, err
 	}
@@ -118,6 +118,5 @@ func getUserClaims(u *db.User) map[string]any {
 		"email":          u.Email,
 		"email_verified": u.EmailVerified,
 		"photo":          u.Image,
-		"sub":            u.ID,
 	}
 }

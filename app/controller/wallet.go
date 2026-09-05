@@ -10,7 +10,7 @@ import (
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/brinestone/mogtrade/web/contract"
-	middleware "github.com/brinestone/mogtrade/web/middleware/guards"
+	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -49,11 +49,13 @@ func (w *Wallets) onUserCreated(ctx context.Context, key string, e eventpayloads
 
 func (w *Wallets) handleGetBalance(c *gin.Context) {
 	// TODO: stub
-	c.JSON(http.StatusOK, gin.H{"foo": "bar"})
+	user, _ := helpers.GetCurrentUser(c)
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
 func (w *Wallets) MountV1(r *gin.RouterGroup) {
-	router := r.Group("/wallet", middleware.RequireAuth)
+	authMiddleware := helpers.ProvideAuthMiddleware()
+	router := r.Group("/wallet", authMiddleware)
 	router.GET("/", w.handleGetBalance)
 	ioc.Invoke(context.TODO(), w.subscribeToEventsV1)
 }

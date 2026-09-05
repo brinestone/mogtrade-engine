@@ -50,7 +50,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
 			a.logger.Error("unable to open transaction, aborting")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, errInternalServerErrorPayload)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
 			return auth.SignInResult{}, err
 		}
 		defer tx.Commit(c.Request.Context())
@@ -73,7 +73,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 			return
 		}
 		a.logger.Error("sign in failed, aborting", "err", err.Error(), "identifier", request.Username)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, errInternalServerErrorPayload)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 			return
 		}
 		a.logger.Error("user creation failed, aborting", "err", err.Error(), "identifier", request.Email)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, errInternalServerErrorPayload)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
 		return
 	}
 

@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/gin-contrib/sessions/redis"
 
 	"github.com/brinestone/mogtrade/core/encoding"
 	"github.com/brinestone/mogtrade/infra"
@@ -20,6 +24,7 @@ import (
 	"github.com/brinestone/mogtrade/web/contract"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"go-slim.dev/ioc"
 )
 
@@ -28,6 +33,7 @@ var (
 )
 
 func main() {
+	godotenv.Load()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -52,9 +58,18 @@ func main() {
 		panic(err)
 	}
 
+	store, err := redis.NewStore(10, "tcp", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_USER"), os.Getenv("REDIS_PWD"))
+	if err != nil {
+		panic(err)
+	}
+
 	engine := gin.Default()
 	baseRouter := engine.Group("/api")
-	if err := api.MountApiV1(baseRouter); err != nil {
+	if err := api.MountApiV1(baseRouter, api.ApiConfig{
+		Host:           os.Getenv("HOST"),
+		SessionStore:   store,
+		AllowedOrigins: strings.Split(os.Getenv("ALLOWED_ORIGINS"), ";"),
+	}); err != nil {
 		panic(err)
 	}
 	engine.Run(fmt.Sprintf(":%d", port))
@@ -158,16 +173,25 @@ func setupAdapters(ctx context.Context) error {
 		return contract.UseInMemoryEventBus(ctx)
 	}, true)
 	ioc.Bind(contract.UlidIdGenerator)
-	err := ioc.Factory(func() encoding.TokenEncoder {
+	ioc.Factory(func() *contract.JwtAdapter {
 		lifetime, err := time.ParseDuration(os.Getenv("JWT_LIFETIME"))
 		if err != nil {
 			panic(err)
 		}
-		return contract.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime)
+		origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ";")
+		hosts := make([]string, 0)
+		for _, origin := range origins {
+			u, err := url.Parse(origin)
+			if err == nil && len(u.Host) > 0 {
+				hosts = append(hosts, u.Host)
+			}
+		}
+		return contract.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime, hosts, os.Getenv("HOST"))
 	})
-	if err != nil {
-		return err
-	}
+	ioc.Factory(func(j *contract.JwtAdapter) encoding.TokenEncoder {
+		return j
+	})
+	ioc.Factory(func(j *contract.JwtAdapter) encoding.TokenVerifier { return j })
 	return nil
 }
 
