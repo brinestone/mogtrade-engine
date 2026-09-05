@@ -15,10 +15,12 @@ import (
 
 	"github.com/gin-contrib/sessions/redis"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/auth"
+	"github.com/brinestone/mogtrade/services/auth/jobs"
 	"github.com/brinestone/mogtrade/services/orders"
 	adapter "github.com/brinestone/mogtrade/web/adapters"
 	"github.com/brinestone/mogtrade/web/api"
@@ -57,12 +59,15 @@ func main() {
 	if err := api.SetupControllers(); err != nil {
 		panic(err)
 	}
-
 	store, err := redis.NewStore(10, "tcp", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_USER"), os.Getenv("REDIS_PWD"))
 	if err != nil {
 		panic(err)
 	}
 
+	if err := registerBackgroundJobs(ctx); err != nil {
+		panic(err)
+	}
+	go startJobScheduler(ctx)
 	engine := gin.Default()
 	baseRouter := engine.Group("/api")
 	if err := api.MountApiV1(baseRouter, api.ApiConfig{
@@ -118,12 +123,13 @@ func setupLogging(ctx context.Context) error {
 		// Build the slog logger inside the setup function
 		logger = slog.New(slog.NewMultiHandler(
 			slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
-			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: logTimeFormatter}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
 			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
+			// slog.NewJSONHandler(errHandler, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
 		))
 	}
 
-	logger = logger.With("app", "mogtrade")
+	logger = logger.WithGroup("mogtrade")
 
 	// Register it to the DI container right here
 	if err := ioc.Factory(func() *slog.Logger {
@@ -169,6 +175,9 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters(ctx context.Context) error {
+	ioc.Factory(func(l *slog.Logger) contract.JobScheduler {
+		return adapter.NewCronJobScheduler(ctx, l.With("service", "job-scheduler"))
+	})
 	ioc.Factory(func() events.EventBus {
 		return adapter.UseInMemoryEventBus(ctx)
 	}, true)
@@ -202,4 +211,20 @@ func parseVars() error {
 	}
 	port = int(_port)
 	return nil
+}
+
+func startJobScheduler(ctx context.Context) {
+	ioc.Invoke(ctx, func(s contract.JobScheduler) {
+		s.Start()
+	})
+}
+func registerBackgroundJobs(ctx context.Context) error {
+	_, err := ioc.Invoke(ctx, func(s contract.JobScheduler, pool *pgxpool.Pool, l *slog.Logger) error {
+		err := s.RegisterJob(jobs.NewStaleTokenRemoverJob("0 0 * * 7", pool, l)) // Every sunday midnight
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return err
 }

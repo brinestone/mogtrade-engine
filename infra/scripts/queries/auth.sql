@@ -1,3 +1,9 @@
+-- name: RemoveStaleRefreshTokens :exec
+delete from refresh_tokens
+where
+    revoked_at is not null
+    or (created_at + valid_window) < now();
+
 -- name: LookupRefreshTokenByDevice :one
 select
     rts.user_id,
