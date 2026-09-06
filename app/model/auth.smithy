@@ -6,26 +6,28 @@ use aws.protocols#restJson1
 
 @title("MogTrade Authentication")
 @restJson1
-@httpBearerAuth
 service Auth {
     version: "2026-02-09"
     operations: [CredentialSignIn]
 }
 
-@http(method: "POST", uri: "/login/credential")
+@http(method: "POST", uri: "/api/v1/login/credential")
 operation CredentialSignIn {
     input: CredentialSignInInput
     output: SignInOutput
     errors: [
-        ErrorResponse
+        ValidationError,
+        UnprocessibleError,
+        UnauthorizedError,
+        InternalServerError,
     ]
 }
 @input
 structure CredentialSignInInput {
     @required
-    username: String
+    email: EmailAddress
     @required
-    password: String
+    password: Password
 }
 @output
 structure SignInOutput {
@@ -35,8 +37,40 @@ structure SignInOutput {
     refreshToken: String
 }
 
-@error("client")
-structure ErrorResponse {
+@error("server")
+@httpError(500)
+structure InternalServerError {
     @required
     error: String
 }
+
+@error("client")
+@httpError(400)
+structure ValidationError {
+    @required
+    error: ErrorMessages
+}
+
+@error("client")
+@httpError(422)
+structure UnprocessibleError{
+    @required
+    error: ErrorMessages
+}
+
+@error("client")
+@httpError(401)
+structure UnauthorizedError{
+    @required
+    error: String
+}
+
+list ErrorMessages {
+    member: String
+}
+
+@pattern("^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$")
+string EmailAddress
+
+@length(min: 6, max: 100)
+string Password

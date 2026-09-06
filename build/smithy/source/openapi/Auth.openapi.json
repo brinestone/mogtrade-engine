@@ -5,7 +5,7 @@
         "version": "2026-02-09"
     },
     "paths": {
-        "/login/credential": {
+        "/api/v1/login/credential": {
             "post": {
                 "operationId": "CredentialSignIn",
                 "requestBody": {
@@ -30,11 +30,41 @@
                         }
                     },
                     "400": {
-                        "description": "ErrorResponse 400 response",
+                        "description": "ValidationError 400 response",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponseResponseContent"
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "UnprocessibleError 422 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnprocessibleErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
                                 }
                             }
                         }
@@ -48,16 +78,19 @@
             "CredentialSignInRequestContent": {
                 "type": "object",
                 "properties": {
-                    "username": {
-                        "type": "string"
+                    "email": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"
                     },
                     "password": {
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 6
                     }
                 },
                 "required": [
-                    "password",
-                    "username"
+                    "email",
+                    "password"
                 ]
             },
             "CredentialSignInResponseContent": {
@@ -75,7 +108,7 @@
                     "refreshToken"
                 ]
             },
-            "ErrorResponseResponseContent": {
+            "InternalServerErrorResponseContent": {
                 "type": "object",
                 "properties": {
                     "error": {
@@ -85,19 +118,46 @@
                 "required": [
                     "error"
                 ]
-            }
-        },
-        "securitySchemes": {
-            "smithy.api.httpBearerAuth": {
-                "type": "http",
-                "description": "HTTP Bearer authentication",
-                "scheme": "Bearer"
+            },
+            "UnauthorizedErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "UnprocessibleErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "ValidationErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "error"
+                ]
             }
         }
-    },
-    "security": [
-        {
-            "smithy.api.httpBearerAuth": []
-        }
-    ]
+    }
 }
