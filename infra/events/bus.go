@@ -1,6 +1,9 @@
 package events
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type Event struct {
 	Data      any
@@ -10,4 +13,5 @@ type DataChannel chan Event
 type EventBus interface {
 	Subscribe(string) DataChannel
 	Publish(string, any)
+	Context() context.Context
 }

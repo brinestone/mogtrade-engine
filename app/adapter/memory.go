@@ -9,9 +9,9 @@ import (
 )
 
 type memoryEventBus struct {
-	mu       sync.RWMutex
-	subs     map[string][]events.DataChannel
-	_Context context.Context
+	mu      sync.RWMutex
+	subs    map[string][]events.DataChannel
+	context context.Context
 }
 
 func (m *memoryEventBus) Subscribe(topic string) events.DataChannel {
@@ -23,7 +23,7 @@ func (m *memoryEventBus) Subscribe(topic string) events.DataChannel {
 	go func(ctx context.Context) {
 		defer close(ch)
 		<-ctx.Done()
-	}(m._Context)
+	}(m.context)
 	return ch
 }
 
@@ -40,11 +40,15 @@ func (m *memoryEventBus) Publish(topic string, data any) {
 	}
 }
 
+func (m *memoryEventBus) Context() context.Context {
+	return m.context
+}
+
 func UseInMemoryEventBus(ctx context.Context) events.EventBus {
 	bus := &memoryEventBus{
-		mu:       sync.RWMutex{},
-		_Context: ctx,
-		subs:     make(map[string][]events.DataChannel),
+		mu:      sync.RWMutex{},
+		context: ctx,
+		subs:    make(map[string][]events.DataChannel),
 	}
 	return bus
 }
