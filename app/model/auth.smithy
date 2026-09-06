@@ -12,6 +12,7 @@ service Auth {
 }
 
 @http(method: "POST", uri: "/api/v1/login/credential")
+@documentation("This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token")
 operation CredentialSignIn {
     input: CredentialSignInInput
     output: SignInOutput
@@ -25,15 +26,19 @@ operation CredentialSignIn {
 @input
 structure CredentialSignInInput {
     @required
+    @documentation("The user's identifying email address")
     email: EmailAddress
     @required
-    password: Password
+    @documentation("The user's password")
+    password: String
 }
 @output
 structure SignInOutput {
     @required
+    @documentation("The access token (JWT) granted to the user")
     accessToken: String
     @required
+    @documentation("The refresh token for the client to obtain a new access token on expiration")
     refreshToken: String
 }
 
@@ -41,6 +46,7 @@ structure SignInOutput {
 @httpError(500)
 structure InternalServerError {
     @required
+    @documentation("The error message from the server")
     error: String
 }
 
@@ -48,6 +54,7 @@ structure InternalServerError {
 @httpError(400)
 structure ValidationError {
     @required
+    @documentation("A list of validation messages")
     error: ErrorMessages
 }
 
@@ -55,6 +62,7 @@ structure ValidationError {
 @httpError(422)
 structure UnprocessibleError{
     @required
+    @documentation("A list of validation messages")
     error: ErrorMessages
 }
 

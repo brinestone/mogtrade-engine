@@ -7,6 +7,7 @@
     "paths": {
         "/api/v1/login/credential": {
             "post": {
+                "description": "This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token",
                 "operationId": "CredentialSignIn",
                 "requestBody": {
                     "content": {
@@ -80,12 +81,12 @@
                 "properties": {
                     "email": {
                         "type": "string",
-                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"
+                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
+                        "description": "The user's identifying email address"
                     },
                     "password": {
                         "type": "string",
-                        "maxLength": 100,
-                        "minLength": 6
+                        "description": "The user's password"
                     }
                 },
                 "required": [
@@ -97,10 +98,12 @@
                 "type": "object",
                 "properties": {
                     "accessToken": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The access token (JWT) granted to the user"
                     },
                     "refreshToken": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The refresh token for the client to obtain a new access token on expiration"
                     }
                 },
                 "required": [
@@ -112,7 +115,8 @@
                 "type": "object",
                 "properties": {
                     "error": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The error message from the server"
                     }
                 },
                 "required": [
@@ -137,7 +141,8 @@
                         "type": "array",
                         "items": {
                             "type": "string"
-                        }
+                        },
+                        "description": "A list of validation messages"
                     }
                 },
                 "required": [
@@ -151,7 +156,8 @@
                         "type": "array",
                         "items": {
                             "type": "string"
-                        }
+                        },
+                        "description": "A list of validation messages"
                     }
                 },
                 "required": [

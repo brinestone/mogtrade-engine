@@ -868,6 +868,7 @@
                 }
             ],
             "traits": {
+                "smithy.api#documentation": "This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token",
                 "smithy.api#http": {
                     "method": "POST",
                     "uri": "/api/v1/login/credential"
@@ -880,12 +881,14 @@
                 "email": {
                     "target": "mogtrade.auth#EmailAddress",
                     "traits": {
+                        "smithy.api#documentation": "The user's identifying email address",
                         "smithy.api#required": {}
                     }
                 },
                 "password": {
-                    "target": "mogtrade.auth#Password",
+                    "target": "smithy.api#String",
                     "traits": {
+                        "smithy.api#documentation": "The user's password",
                         "smithy.api#required": {}
                     }
                 }
@@ -912,6 +915,7 @@
                 "error": {
                     "target": "smithy.api#String",
                     "traits": {
+                        "smithy.api#documentation": "The error message from the server",
                         "smithy.api#required": {}
                     }
                 }
@@ -936,12 +940,14 @@
                 "accessToken": {
                     "target": "smithy.api#String",
                     "traits": {
+                        "smithy.api#documentation": "The access token (JWT) granted to the user",
                         "smithy.api#required": {}
                     }
                 },
                 "refreshToken": {
                     "target": "smithy.api#String",
                     "traits": {
+                        "smithy.api#documentation": "The refresh token for the client to obtain a new access token on expiration",
                         "smithy.api#required": {}
                     }
                 }
@@ -971,6 +977,7 @@
                 "error": {
                     "target": "mogtrade.auth#ErrorMessages",
                     "traits": {
+                        "smithy.api#documentation": "A list of validation messages",
                         "smithy.api#required": {}
                     }
                 }
@@ -986,6 +993,7 @@
                 "error": {
                     "target": "mogtrade.auth#ErrorMessages",
                     "traits": {
+                        "smithy.api#documentation": "A list of validation messages",
                         "smithy.api#required": {}
                     }
                 }
