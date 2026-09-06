@@ -5,7 +5,7 @@
         "version": "2026-02-09"
     },
     "paths": {
-        "/api/v1/login/credential": {
+        "/api/v1/auth/login/credential": {
             "post": {
                 "description": "This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token",
                 "operationId": "CredentialSignIn",
@@ -19,6 +19,18 @@
                     },
                     "required": true
                 },
+                "parameters": [
+                    {
+                        "name": "X-Device-Id",
+                        "in": "header",
+                        "description": "The client device's ID",
+                        "schema": {
+                            "type": "string",
+                            "description": "The client device's ID"
+                        },
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "CredentialSignIn 200 response",
@@ -70,12 +82,143 @@
                             }
                         }
                     }
+                },
+                "security": []
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "get": {
+                "description": "Rotate access token",
+                "operationId": "RotateAccessToken",
+                "parameters": [
+                    {
+                        "name": "X-Device-Id",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "name": "X-Refresh-Token",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "RotateAccessToken 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RotateAccessTokenResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        },
+        "/api/v1/auth/register/credential": {
+            "post": {
+                "description": "Create user account using credentials",
+                "operationId": "CredentialSignUp",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CredentialSignUpRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "CredentialSignUp 201 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "ConflictError 409 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConflictErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
             }
         }
     },
     "components": {
         "schemas": {
+            "ConflictErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "The error message from the server"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
             "CredentialSignInRequestContent": {
                 "type": "object",
                 "properties": {
@@ -111,6 +254,38 @@
                     "refreshToken"
                 ]
             },
+            "CredentialSignUpRequestContent": {
+                "type": "object",
+                "properties": {
+                    "names": {
+                        "type": "string",
+                        "description": "The names of the user"
+                    },
+                    "email": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
+                        "description": "The email address of the user. MUST be unique"
+                    },
+                    "password": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 6,
+                        "description": "User password"
+                    },
+                    "confirmPassword": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 6,
+                        "description": "Password confirmation. MUST have value equal to the password value"
+                    }
+                },
+                "required": [
+                    "confirmPassword",
+                    "email",
+                    "names",
+                    "password"
+                ]
+            },
             "InternalServerErrorResponseContent": {
                 "type": "object",
                 "properties": {
@@ -121,6 +296,23 @@
                 },
                 "required": [
                     "error"
+                ]
+            },
+            "RotateAccessTokenResponseContent": {
+                "type": "object",
+                "properties": {
+                    "accessToken": {
+                        "type": "string",
+                        "description": "The access token (JWT) granted to the user"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "The refresh token for the client to obtain a new access token on expiration"
+                    }
+                },
+                "required": [
+                    "accessToken",
+                    "refreshToken"
                 ]
             },
             "UnauthorizedErrorResponseContent": {
@@ -164,6 +356,18 @@
                     "error"
                 ]
             }
+        },
+        "securitySchemes": {
+            "smithy.api.httpBearerAuth": {
+                "type": "http",
+                "description": "HTTP Bearer authentication",
+                "scheme": "Bearer"
+            }
         }
-    }
+    },
+    "security": [
+        {
+            "smithy.api.httpBearerAuth": []
+        }
+    ]
 }

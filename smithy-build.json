@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "sources": [
-        "app/model"
+        "smithy"
     ],
     "maven": {
         "dependencies": [
