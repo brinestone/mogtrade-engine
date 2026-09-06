@@ -172,7 +172,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, auth.ErrRefreshTokenUnusable) || errors.Is(err, auth.ErrUserNotFound) || errors.Is(err, auth.ErrRefreshTokenNotFound) {
 			a.logger.Warn("token error", "err", err.Error())
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "refresh token not found or expired"})
 			return
 		}
 		a.logger.Error("error while rotating access token", "err", err.Error())

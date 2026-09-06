@@ -838,6 +838,20 @@
             "operations": [
                 {
                     "target": "mogtrade.auth#CredentialSignIn"
+                },
+                {
+                    "target": "mogtrade.auth#CredentialSignUp"
+                },
+                {
+                    "target": "mogtrade.auth#RotateAccessToken"
+                }
+            ],
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#InternalServerError"
+                },
+                {
+                    "target": "mogtrade.core.types#ValidationError"
                 }
             ],
             "traits": {
@@ -856,34 +870,230 @@
             },
             "errors": [
                 {
-                    "target": "mogtrade.auth#ErrorResponse"
+                    "target": "mogtrade.core.types#UnauthorizedError"
+                },
+                {
+                    "target": "mogtrade.core.types#UnprocessibleError"
                 }
             ],
             "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token",
                 "smithy.api#http": {
                     "method": "POST",
-                    "uri": "/login/credential"
+                    "uri": "/api/v1/auth/login/credential"
                 }
             }
         },
         "mogtrade.auth#CredentialSignInInput": {
             "type": "structure",
             "members": {
-                "username": {
-                    "target": "smithy.api#String",
+                "email": {
+                    "target": "mogtrade.core.types#EmailAddress",
                     "traits": {
+                        "smithy.api#documentation": "The user's identifying email address",
                         "smithy.api#required": {}
                     }
                 },
                 "password": {
                     "target": "smithy.api#String",
                     "traits": {
+                        "smithy.api#documentation": "The user's password",
+                        "smithy.api#required": {}
+                    }
+                },
+                "deviceId": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The client device's ID",
+                        "smithy.api#httpHeader": "X-Device-Id",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.auth#CredentialSignUp": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.auth#CredentialSignUpInput"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#ConflictError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "Create user account using credentials",
+                "smithy.api#http": {
+                    "method": "POST",
+                    "uri": "/api/v1/auth/register/credential",
+                    "code": 201
+                }
+            }
+        },
+        "mogtrade.auth#CredentialSignUpInput": {
+            "type": "structure",
+            "members": {
+                "names": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The names of the user",
+                        "smithy.api#required": {}
+                    }
+                },
+                "email": {
+                    "target": "mogtrade.core.types#EmailAddress",
+                    "traits": {
+                        "smithy.api#documentation": "The email address of the user. MUST be unique",
+                        "smithy.api#required": {}
+                    }
+                },
+                "password": {
+                    "target": "mogtrade.core.types#Password",
+                    "traits": {
+                        "smithy.api#documentation": "User password",
+                        "smithy.api#required": {}
+                    }
+                },
+                "confirmPassword": {
+                    "target": "mogtrade.core.types#Password",
+                    "traits": {
+                        "smithy.api#documentation": "Password confirmation. MUST have value equal to the password value",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.auth#RotateAccessToken": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.auth#RotateAccessTokenInput"
+            },
+            "output": {
+                "target": "mogtrade.auth#SignInOutput"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#UnauthorizedError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [
+                    "smithy.api#httpBearerAuth"
+                ],
+                "smithy.api#documentation": "Rotate access token",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/auth/refresh"
+                },
+                "smithy.api#readonly": {}
+            }
+        },
+        "mogtrade.auth#RotateAccessTokenInput": {
+            "type": "structure",
+            "members": {
+                "refreshToken": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#httpHeader": "X-Refresh-Token",
+                        "smithy.api#required": {}
+                    }
+                },
+                "deviceId": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#httpHeader": "X-Device-Id",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.auth#SignInOutput": {
+            "type": "structure",
+            "members": {
+                "accessToken": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The access token (JWT) granted to the user",
+                        "smithy.api#required": {}
+                    }
+                },
+                "refreshToken": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The refresh token for the client to obtain a new access token on expiration",
                         "smithy.api#required": {}
                     }
                 }
             }
         },
-        "mogtrade.auth#ErrorResponse": {
+        "mogtrade.core.types#ConflictError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The error message from the server",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 409
+            }
+        },
+        "mogtrade.core.types#EmailAddress": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"
+            }
+        },
+        "mogtrade.core.types#ErrorMessages": {
+            "type": "list",
+            "member": {
+                "target": "smithy.api#String"
+            }
+        },
+        "mogtrade.core.types#InternalServerError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The error message from the server",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "server",
+                "smithy.api#httpError": 500
+            }
+        },
+        "mogtrade.core.types#Password": {
+            "type": "string",
+            "traits": {
+                "smithy.api#length": {
+                    "min": 6,
+                    "max": 100
+                }
+            }
+        },
+        "mogtrade.core.types#UnauthorizedError": {
             "type": "structure",
             "members": {
                 "error": {
@@ -894,24 +1104,40 @@
                 }
             },
             "traits": {
-                "smithy.api#error": "client"
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 401
             }
         },
-        "mogtrade.auth#SignInOutput": {
+        "mogtrade.core.types#UnprocessibleError": {
             "type": "structure",
             "members": {
-                "accessToken": {
-                    "target": "smithy.api#String",
+                "error": {
+                    "target": "mogtrade.core.types#ErrorMessages",
                     "traits": {
-                        "smithy.api#required": {}
-                    }
-                },
-                "refreshToken": {
-                    "target": "smithy.api#String",
-                    "traits": {
+                        "smithy.api#documentation": "A list of validation messages",
                         "smithy.api#required": {}
                     }
                 }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 422
+            }
+        },
+        "mogtrade.core.types#ValidationError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "mogtrade.core.types#ErrorMessages",
+                    "traits": {
+                        "smithy.api#documentation": "A list of validation messages",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 400
             }
         },
         "smithy.openapi#SpecificationExtensionKey": {
