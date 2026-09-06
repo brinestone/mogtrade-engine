@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/billing"
-	adapter "github.com/brinestone/mogtrade/web/adapters"
 	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	"github.com/gin-gonic/gin"
@@ -23,7 +23,7 @@ type Wallets struct {
 	pool   *pgxpool.Pool
 }
 
-func (w *Wallets) onUserCreated(ctx context.Context, key string, e eventpayloads.UserCreatedEventArgs) error {
+func (w *Wallets) onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, key string, e eventpayloads.UserCreatedEventArgs) error {
 	l := w.logger.With("uid", e.UserId, "event", key)
 	l.Info("creating wallet for new user")
 	timedC, cancel := context.WithTimeout(ctx, time.Second*5)
@@ -37,7 +37,7 @@ func (w *Wallets) onUserCreated(ctx context.Context, key string, e eventpayloads
 	}
 	defer tx.Rollback(timedC)
 
-	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), adapter.UlidIdGenerator, e.UserId)
+	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), idg, e.UserId)
 	if err == nil {
 		tx.Commit(timedC)
 		l.Info("wallet created successfully")
@@ -69,7 +69,9 @@ func (w *Wallets) subscribeToEventsV1(eb events.EventBus) {
 				w.logger.Warn("event payload is not of type eventpayloads.UserCreatedEventArgs")
 				continue
 			}
-			w.onUserCreated(context.Background(), EventKeyUserCreatedV1, ev)
+			ioc.Invoke(eb.Context(), func(idg contract.IdGeneratorFunc) {
+				w.onUserCreated(eb.Context(), idg, EventKeyUserCreatedV1, ev)
+			})
 		}
 	}(userCreatedCh)
 }

@@ -1,5 +1,6 @@
 build/smithy/source/build-info
 build/smithy/source/sources
+build/smithy/source/model/
 .env
 .vfox/
 tmp
