@@ -14,13 +14,16 @@ import (
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 	"go-slim.dev/ioc"
 )
 
 type Wallets struct {
-	repo   *db.Queries
-	logger *slog.Logger
-	pool   *pgxpool.Pool
+	repo             *db.Queries
+	logger           *slog.Logger
+	pool             *pgxpool.Pool
+	vStartingBalance decimal.Decimal
+	rStartingBalance decimal.Decimal
 }
 
 func (w *Wallets) onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, key string, e eventpayloads.UserCreatedEventArgs) error {
@@ -37,13 +40,22 @@ func (w *Wallets) onUserCreated(ctx context.Context, idg contract.IdGeneratorFun
 	}
 	defer tx.Rollback(timedC)
 
-	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), idg, e.UserId)
+	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), idg, e.UserId, db.WalletTypeReal, w.rStartingBalance)
 	if err == nil {
 		tx.Commit(timedC)
-		l.Info("wallet created successfully")
+		l.Info("wallet created successfully", "type", db.WalletTypeReal)
 	} else {
 		l.Warn("failed to create wallet for user", "err", err.Error())
 	}
+
+	err = billing.CreateUserWallet(timedC, w.repo.WithTx(tx), idg, e.UserId, db.WalletTypeVirtual, w.vStartingBalance)
+	if err == nil {
+		tx.Commit(timedC)
+		l.Info("wallet created successfully", "type", db.WalletTypeVirtual)
+	} else {
+		l.Warn("failed to create wallet for user", "err", err.Error(), "type", db.WalletTypeVirtual)
+	}
+
 	return err
 }
 
@@ -76,8 +88,8 @@ func (w *Wallets) subscribeToEventsV1(eb events.EventBus) {
 	}(userCreatedCh)
 }
 
-func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool) *Wallets {
+func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool, vStart decimal.Decimal, rStart decimal.Decimal) *Wallets {
 	return &Wallets{
-		repo, logger.With("controller", "wallet"), pool,
+		repo, logger.With("controller", "wallet"), pool, vStart, rStart,
 	}
 }

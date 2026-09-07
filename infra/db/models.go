@@ -140,6 +140,48 @@ func (ns NullOrderType) Value() (driver.Value, error) {
 	return string(ns.OrderType), nil
 }
 
+type WalletType string
+
+const (
+	WalletTypeReal    WalletType = "real"
+	WalletTypeVirtual WalletType = "virtual"
+)
+
+func (e *WalletType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = WalletType(s)
+	case string:
+		*e = WalletType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for WalletType: %T", src)
+	}
+	return nil
+}
+
+type NullWalletType struct {
+	WalletType WalletType
+	Valid      bool // Valid is true if WalletType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullWalletType) Scan(value interface{}) error {
+	if value == nil {
+		ns.WalletType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.WalletType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullWalletType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.WalletType), nil
+}
+
 type Account struct {
 	ID                    string
 	AccountID             string
@@ -174,4 +216,5 @@ type WalletSnapshot struct {
 	TotalTransactions int64
 	LastActivityAt    pgtype.Timestamptz
 	SnapshotCreatedAt pgtype.Timestamptz
+	WalletType        WalletType
 }
