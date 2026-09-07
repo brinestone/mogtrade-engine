@@ -206,6 +206,7 @@ type User struct {
 	Image         *string
 	CreatedAt     pgtype.Timestamp
 	UpdatedAt     pgtype.Timestamp
+	Prefs         []byte
 }
 
 type WalletSnapshot struct {

@@ -15,7 +15,6 @@ func GetCurrentUserId(c *gin.Context) string {
 func GetCurrentUser(c *gin.Context) (db.User, error) {
 	uid := c.GetString("uid")
 	return ioc.Call2[db.User](c.Request.Context(), func(q *db.Queries) (db.User, error) {
-
 		return q.FindUserById(c.Request.Context(), uid)
 	})
 }

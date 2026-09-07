@@ -28,7 +28,7 @@ func MountApiV1(r *gin.RouterGroup, cfg ApiConfig) error {
 	router.Use(ginhelmet.Default())
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.AllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Device-Id"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -42,6 +42,9 @@ func MountApiV1(r *gin.RouterGroup, cfg ApiConfig) error {
 		c.MountV1(router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Wallets) {
+		c.MountV1(router)
+	})
+	ioc.Invoke(ctx, func(c *controller.User) {
 		c.MountV1(router)
 	})
 
@@ -59,6 +62,7 @@ func SetupControllers() error {
 	ioc.Factory(controller.NewOrdersController, true)
 	ioc.Factory(controller.NewAuthController, true)
 	ioc.Factory(controller.NewWalletsController, true)
+	ioc.Factory(controller.NewUserController, true)
 	ioc.NamedFactory("middleware.auth", middleware.RequireAuth)
 	return nil
 }
