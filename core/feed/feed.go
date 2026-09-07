@@ -1,4 +1,4 @@
-package datasource
+package feed
 
 type DatasourceQueryRequestInterval string
 
