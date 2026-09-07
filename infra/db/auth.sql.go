@@ -148,7 +148,7 @@ func (q *Queries) FindCredentialAccountById(ctx context.Context, accountID strin
 
 const findUserByEmail = `-- name: FindUserByEmail :one
 SELECT
-    id, name, email, email_verified, image, created_at, updated_at
+    id, name, email, email_verified, image, created_at, updated_at, prefs
 FROM
     "user"
 WHERE
@@ -168,13 +168,14 @@ func (q *Queries) FindUserByEmail(ctx context.Context, email string) (User, erro
 		&i.Image,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Prefs,
 	)
 	return i, err
 }
 
 const findUserById = `-- name: FindUserById :one
 SELECT
-    id, name, email, email_verified, image, created_at, updated_at
+    id, name, email, email_verified, image, created_at, updated_at, prefs
 FROM
     "user"
 WHERE
@@ -194,6 +195,7 @@ func (q *Queries) FindUserById(ctx context.Context, id string) (User, error) {
 		&i.Image,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Prefs,
 	)
 	return i, err
 }
