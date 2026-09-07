@@ -13,8 +13,8 @@ var (
 	ErrWalletAlreadyExists = errors.New("a wallet already exists for the user specified")
 )
 
-func CreateUserWallet(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, userId string) error {
-	exists, err := q.UserHasWallet(ctx, &userId)
+func CreateUserWallet(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, userId string, _type db.WalletType, balance decimal.Decimal) error {
+	exists, err := q.UserHasWallet(ctx, db.UserHasWalletParams{Owner: &userId, Type: _type})
 	if err != nil {
 		return err
 	}
@@ -22,12 +22,19 @@ func CreateUserWallet(ctx context.Context, q *db.Queries, idg contract.IdGenerat
 	if exists {
 		return ErrWalletAlreadyExists
 	}
-
-	err = q.CreateWalletForUser(ctx, db.CreateWalletForUserParams{
-		ID:              idg(),
-		Owner:           &userId,
-		StartingBalance: decimal.NewNullDecimal(decimal.Zero),
-	})
+	if _type == db.WalletTypeReal {
+		err = q.CreateRealWallet(ctx, db.CreateRealWalletParams{
+			ID:              idg(),
+			Owner:           &userId,
+			StartingBalance: decimal.NewNullDecimal(balance),
+		})
+	} else {
+		err = q.CreateVirtualWallet(ctx, db.CreateVirtualWalletParams{
+			ID:              idg(),
+			Owner:           &userId,
+			StartingBalance: decimal.NewNullDecimal(balance),
+		})
+	}
 
 	return err
 }

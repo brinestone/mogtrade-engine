@@ -1,3 +1,9 @@
+-- name: CreateVirtualWallet :exec
+insert into
+    wallets ("type", id, "owner", starting_balance)
+values
+    ('virtual', $1, $2, $3);
+
 -- name: UserHasWallet :one
 select
     exists (
@@ -7,9 +13,10 @@ select
             wallets
         where
             "owner" = $1
+            and "type" = $2
     );
 
--- name: CreateWalletForUser :exec
+-- name: CreateRealWallet :exec
 insert into
     wallets (id, "owner", starting_balance)
 values

@@ -11,27 +11,45 @@ import (
 	decimal "github.com/shopspring/decimal"
 )
 
-const createWalletForUser = `-- name: CreateWalletForUser :exec
+const createRealWallet = `-- name: CreateRealWallet :exec
 insert into
     wallets (id, "owner", starting_balance)
 values
     ($1, $2, $3)
 `
 
-type CreateWalletForUserParams struct {
+type CreateRealWalletParams struct {
 	ID              string
 	Owner           *string
 	StartingBalance decimal.NullDecimal
 }
 
-func (q *Queries) CreateWalletForUser(ctx context.Context, arg CreateWalletForUserParams) error {
-	_, err := q.db.Exec(ctx, createWalletForUser, arg.ID, arg.Owner, arg.StartingBalance)
+func (q *Queries) CreateRealWallet(ctx context.Context, arg CreateRealWalletParams) error {
+	_, err := q.db.Exec(ctx, createRealWallet, arg.ID, arg.Owner, arg.StartingBalance)
+	return err
+}
+
+const createVirtualWallet = `-- name: CreateVirtualWallet :exec
+insert into
+    wallets ("type", id, "owner", starting_balance)
+values
+    ('virtual', $1, $2, $3)
+`
+
+type CreateVirtualWalletParams struct {
+	ID              string
+	Owner           *string
+	StartingBalance decimal.NullDecimal
+}
+
+func (q *Queries) CreateVirtualWallet(ctx context.Context, arg CreateVirtualWalletParams) error {
+	_, err := q.db.Exec(ctx, createVirtualWallet, arg.ID, arg.Owner, arg.StartingBalance)
 	return err
 }
 
 const findWalletSnapshotByOwnerId = `-- name: FindWalletSnapshotByOwnerId :one
 SELECT
-    wallet_id, owner_id, starting_balance, current_balance, total_transactions, last_activity_at, snapshot_created_at
+    wallet_id, owner_id, starting_balance, current_balance, total_transactions, last_activity_at, snapshot_created_at, wallet_type
 FROM
     wallet_snapshots
 WHERE
@@ -51,6 +69,7 @@ func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID *stri
 		&i.TotalTransactions,
 		&i.LastActivityAt,
 		&i.SnapshotCreatedAt,
+		&i.WalletType,
 	)
 	return i, err
 }
@@ -64,11 +83,17 @@ select
             wallets
         where
             "owner" = $1
+            and "type" = $2
     )
 `
 
-func (q *Queries) UserHasWallet(ctx context.Context, owner *string) (bool, error) {
-	row := q.db.QueryRow(ctx, userHasWallet, owner)
+type UserHasWalletParams struct {
+	Owner *string
+	Type  WalletType
+}
+
+func (q *Queries) UserHasWallet(ctx context.Context, arg UserHasWalletParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userHasWallet, arg.Owner, arg.Type)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

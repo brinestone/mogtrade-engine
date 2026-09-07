@@ -243,7 +243,10 @@ func (q *Queries) LookupRefreshTokenByDevice(ctx context.Context, arg LookupRefr
 }
 
 const removeStaleRefreshTokens = `-- name: RemoveStaleRefreshTokens :exec
-delete from refresh_tokens where revoked_at is not null or (created_at + valid_window) < now()
+delete from refresh_tokens
+where
+    revoked_at is not null
+    or (created_at + valid_window) < now()
 `
 
 func (q *Queries) RemoveStaleRefreshTokens(ctx context.Context) error {
