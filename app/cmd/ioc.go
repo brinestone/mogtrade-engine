@@ -37,7 +37,9 @@ func setupServices() error {
 	}
 
 	if err := ioc.Factory(func(h *market.ExchangeHub, l *slog.Logger) *market.ExchangePoller {
-		return market.NewExchangePoller(l.With("service", "exchange-poller"), h, []feed.Datasource{})
+		return market.NewExchangePoller(l.With("service", "exchange-poller"), h, []feed.Datasource{
+			feed.NewMassiveDatasource(os.Getenv("MASSIVE_API_KEY"), feed.MassiveConfig{RequestTimeout: 10 * time.Second}),
+		})
 	}, true); err != nil {
 		return err
 	}
