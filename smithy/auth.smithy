@@ -14,7 +14,6 @@ use mogtrade.core.types#Password
 
 @restJson1
 @httpBearerAuth
-@tags(["Auth"])
 @title("MogTrade Authentication")
 service Auth {
     version: "2026-02-09"
@@ -27,6 +26,7 @@ service Auth {
 
 @auth([])
 @readonly
+@tags(["Auth"])
 @http(method:"GET", uri:"/api/v1/auth/email-available")
 @documentation("Check whether an email available for a user")
 operation CheckEmailAvailable{
@@ -34,8 +34,9 @@ operation CheckEmailAvailable{
     output: AvailabilityOutput
 }
 
-@auth([httpBearerAuth])
 @readonly
+@tags(["Auth"])
+@auth([httpBearerAuth])
 @http(method: "GET", uri: "/api/v1/auth/refresh")
 @documentation("Rotate access token")
 operation RotateAccessToken {
@@ -57,6 +58,7 @@ structure RotateAccessTokenInput {
 }
 
 @auth([])
+@tags(["Auth"])
 @http(method: "POST", uri: "/api/v1/auth/register/credential", code: 201)
 @documentation("Create user account using credentials")
 operation CredentialSignUp {
@@ -83,6 +85,7 @@ structure CredentialSignUpInput {
 }
 
 @auth([])
+@tags(["Auth"])
 @http(method: "POST", uri: "/api/v1/auth/login/credential")
 @documentation("This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token")
 operation CredentialSignIn {
