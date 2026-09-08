@@ -114,9 +114,9 @@ structure SignInOutput {
     @required
     @documentation("The access token (JWT) granted to the user")
     accessToken: String
-    @required
-    @documentation("The refresh token for the client to obtain a new access token on expiration")
-    refreshToken: String
+    // @required
+    // @documentation("The refresh token for the client to obtain a new access token on expiration")
+    // refreshToken: String
 }
 
 @input
