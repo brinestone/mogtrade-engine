@@ -5,6 +5,57 @@
         "version": "2026-02-09"
     },
     "paths": {
+        "/api/v1/auth/email-available": {
+            "get": {
+                "description": "Check whether an email available for a user",
+                "operationId": "CheckEmailAvailable",
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "query",
+                        "description": "The email address query",
+                        "schema": {
+                            "type": "string",
+                            "description": "The email address query"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CheckEmailAvailable 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CheckEmailAvailableResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
         "/api/v1/auth/login/credential": {
             "post": {
                 "description": "This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token",
@@ -207,6 +258,18 @@
     },
     "components": {
         "schemas": {
+            "CheckEmailAvailableResponseContent": {
+                "type": "object",
+                "properties": {
+                    "available": {
+                        "type": "boolean",
+                        "description": "Whether the requested resource identifier is available or not"
+                    }
+                },
+                "required": [
+                    "available"
+                ]
+            },
             "ConflictErrorResponseContent": {
                 "type": "object",
                 "properties": {

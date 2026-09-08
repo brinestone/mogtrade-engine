@@ -3,6 +3,13 @@ namespace mogtrade.core.types
 
 use smithy.api#readonly
 
+
+structure AvailabilityOutput {
+    @required
+    @documentation("Whether the requested resource identifier is available or not")
+    available: Boolean
+}
+
 @error("client")
 @httpError(409)
 structure ConflictError{
