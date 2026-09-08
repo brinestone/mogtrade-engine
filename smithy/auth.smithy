@@ -3,6 +3,7 @@ namespace mogtrade.auth
 
 use smithy.api#readonly
 use aws.protocols#restJson1
+use mogtrade.core.types#AvailabilityOutput
 use mogtrade.core.types#ValidationError
 use mogtrade.core.types#EmailAddress
 use mogtrade.core.types#ConflictError
@@ -20,7 +21,16 @@ service Auth {
         ValidationError,
         InternalServerError
     ]
-    operations: [CredentialSignIn, CredentialSignUp, RotateAccessToken]
+    operations: [CredentialSignIn, CredentialSignUp, RotateAccessToken, CheckEmailAvailable]
+}
+
+@auth([])
+@readonly
+@http(method:"GET", uri:"/api/v1/auth/email-available")
+@documentation("Check whether an email available for a user")
+operation CheckEmailAvailable{
+    input: CheckEmailAvailableInput
+    output: AvailabilityOutput
 }
 
 @auth([httpBearerAuth])
@@ -103,4 +113,12 @@ structure SignInOutput {
     @required
     @documentation("The refresh token for the client to obtain a new access token on expiration")
     refreshToken: String
+}
+
+@input
+structure CheckEmailAvailableInput {
+    @required
+    @documentation("The email address query")
+    @httpQuery("email")
+    email: String
 }

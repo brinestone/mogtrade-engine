@@ -837,6 +837,9 @@
             "version": "2026-02-09",
             "operations": [
                 {
+                    "target": "mogtrade.auth#CheckEmailAvailable"
+                },
+                {
                     "target": "mogtrade.auth#CredentialSignIn"
                 },
                 {
@@ -858,6 +861,40 @@
                 "aws.protocols#restJson1": {},
                 "smithy.api#httpBearerAuth": {},
                 "smithy.api#title": "MogTrade Authentication"
+            }
+        },
+        "mogtrade.auth#CheckEmailAvailable": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.auth#CheckEmailAvailableInput"
+            },
+            "output": {
+                "target": "mogtrade.core.types#AvailabilityOutput"
+            },
+            "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "Check whether an email available for a user",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/auth/email-available"
+                },
+                "smithy.api#readonly": {}
+            }
+        },
+        "mogtrade.auth#CheckEmailAvailableInput": {
+            "type": "structure",
+            "members": {
+                "email": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The email address query",
+                        "smithy.api#httpQuery": "email",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
             }
         },
         "mogtrade.auth#CredentialSignIn": {
@@ -1035,6 +1072,18 @@
                     "target": "smithy.api#String",
                     "traits": {
                         "smithy.api#documentation": "The refresh token for the client to obtain a new access token on expiration",
+                        "smithy.api#required": {}
+                    }
+                }
+            }
+        },
+        "mogtrade.core.types#AvailabilityOutput": {
+            "type": "structure",
+            "members": {
+                "available": {
+                    "target": "smithy.api#Boolean",
+                    "traits": {
+                        "smithy.api#documentation": "Whether the requested resource identifier is available or not",
                         "smithy.api#required": {}
                     }
                 }
