@@ -16,6 +16,7 @@ require (
 	github.com/gorilla/context v1.1.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/sessions v1.4.0 // indirect
+	github.com/polygon-io/client-go v1.16.18 // indirect
 )
 
 require (

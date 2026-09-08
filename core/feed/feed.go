@@ -17,4 +17,5 @@ type DatasourceQueryRequest struct {
 }
 type Datasource interface {
 	Pull(query DatasourceQueryRequest) ([]FeedEntry, error)
+	Name() string
 }
