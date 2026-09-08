@@ -432,5 +432,10 @@
         {
             "smithy.api.httpBearerAuth": []
         }
+    ],
+    "tags": [
+        {
+            "name": "Auth"
+        }
     ]
 }

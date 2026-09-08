@@ -14,6 +14,7 @@ use mogtrade.core.types#Password
 
 @restJson1
 @httpBearerAuth
+@tags(["Auth"])
 @title("MogTrade Authentication")
 service Auth {
     version: "2026-02-09"
