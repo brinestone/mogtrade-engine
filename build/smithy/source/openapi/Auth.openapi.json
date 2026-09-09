@@ -75,7 +75,7 @@
                 },
                 "parameters": [
                     {
-                        "name": "X-Device-Id",
+                        "name": "X-d-id",
                         "in": "header",
                         "description": "The client device's ID",
                         "schema": {
@@ -149,7 +149,7 @@
                 "operationId": "RotateAccessToken",
                 "parameters": [
                     {
-                        "name": "X-Device-Id",
+                        "name": "X-Refresh-Token",
                         "in": "header",
                         "schema": {
                             "type": "string"
@@ -157,7 +157,7 @@
                         "required": true
                     },
                     {
-                        "name": "X-Refresh-Token",
+                        "name": "X-d-Id",
                         "in": "header",
                         "schema": {
                             "type": "string"
