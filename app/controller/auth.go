@@ -151,17 +151,6 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
 		return
 	}
-	refreshToken, err := c.Cookie("refresh-token")
-	if err != nil {
-		if errors.Is(err, http.ErrNoCookie) {
-			a.logger.Warn("no refresh token cookie was found, aborting.")
-			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid refresh token"})
-			return
-		}
-		a.logger.Error("cookie parsing error", "err", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
-		return
-	}
 
 	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc, t auth.TokenEncoder) (auth.SignInResult, error) {
 		tx, err := p.Begin(c.Request.Context())
@@ -174,7 +163,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 		sResult, err := auth.RotateAccessToken(c.Request.Context(), q.WithTx(tx), idg, t, auth.RotateAccessTokenInput{
 			Lifetime: a.refreshLifetime,
 			DeviceId: req.DeviceId,
-			Hash:     refreshToken,
+			Hash:     req.RefreshToken,
 		})
 
 		tx.Commit(c.Request.Context())

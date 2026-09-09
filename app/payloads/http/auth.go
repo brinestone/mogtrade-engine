@@ -23,5 +23,6 @@ type CredentialSignUpRequest struct {
 }
 
 type RotateRefreshTokenRequest struct {
-	DeviceId string `header:"x-d-id" binding:"required"`
+	DeviceId     string `header:"x-d-id" binding:"required"`
+	RefreshToken string `header:"x-refresh-token" binding:"required"`
 }
