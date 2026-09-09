@@ -9,8 +9,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gin-contrib/sessions/redis"
-
 	"github.com/brinestone/mogtrade/web/api"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -46,10 +44,10 @@ func main() {
 	if err := api.SetupControllers(); err != nil {
 		panic(err)
 	}
-	store, err := redis.NewStore(10, "tcp", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_USER"), os.Getenv("REDIS_PWD"))
-	if err != nil {
-		panic(err)
-	}
+	// store, err := redis.NewStore(10, "tcp", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_USER"), os.Getenv("REDIS_PWD"))
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	if err := registerBackgroundJobs(ctx); err != nil {
 		panic(err)
@@ -62,12 +60,9 @@ func main() {
 		})
 	}()
 	engine := gin.Default()
+	api.MountGlobalMiddlewares(engine, strings.Split(os.Getenv("ALLOWED_ORIGINS"), ";"))
 	baseRouter := engine.Group("/api")
-	if err := api.MountApiV1(baseRouter, api.ApiConfig{
-		Host:           os.Getenv("HOST"),
-		SessionStore:   store,
-		AllowedOrigins: strings.Split(os.Getenv("ALLOWED_ORIGINS"), ";"),
-	}); err != nil {
+	if err := api.MountApiV1(baseRouter); err != nil {
 		panic(err)
 	}
 	engine.Run(fmt.Sprintf(":%d", port))

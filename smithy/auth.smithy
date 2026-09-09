@@ -53,7 +53,7 @@ structure RotateAccessTokenInput {
     @httpHeader("X-Refresh-Token")
     refreshToken: String
     @required
-    @httpHeader("X-Device-Id")
+    @httpHeader("X-d-Id")
     deviceId: String
 }
 
@@ -104,7 +104,7 @@ structure CredentialSignInInput {
     @required
     @documentation("The user's password")
     password: String
-    @httpHeader("X-Device-Id")
+    @httpHeader("X-d-id")
     @required
     @documentation("The client device's ID")
     deviceId: String
@@ -114,9 +114,6 @@ structure SignInOutput {
     @required
     @documentation("The access token (JWT) granted to the user")
     accessToken: String
-    // @required
-    // @documentation("The refresh token for the client to obtain a new access token on expiration")
-    // refreshToken: String
 }
 
 @input
