@@ -114,6 +114,9 @@ structure SignInOutput {
     @required
     @documentation("The access token (JWT) granted to the user")
     accessToken: String
+    @required
+    @documentation("The refresh token")
+    refreshToken: String
 }
 
 @input

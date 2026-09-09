@@ -2,6 +2,9 @@ package helpers
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strings"
 
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/gin-gonic/gin"
@@ -21,4 +24,9 @@ func GetCurrentUser(c *gin.Context) (db.User, error) {
 func ProvideAuthMiddleware() gin.HandlerFunc {
 	ptr, _ := ioc.NamedGet[gin.HandlerFunc](context.TODO(), "middleware.auth")
 	return *ptr
+}
+
+func GetCookieDomain() string {
+	host := os.Getenv("HOST")
+	return strings.ReplaceAll(host, fmt.Sprintf(":%s", os.Getenv("PORT")), "")
 }
