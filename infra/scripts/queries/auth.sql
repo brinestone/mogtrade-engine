@@ -1,3 +1,14 @@
+-- name: IsEmailAvailable :one
+select
+    not exists (
+        select
+            1
+        from
+            "user"
+        where
+            email = $1
+    );
+
 -- name: RemoveStaleRefreshTokens :exec
 delete from refresh_tokens
 where

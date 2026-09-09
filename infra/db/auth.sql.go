@@ -214,6 +214,25 @@ func (q *Queries) InvalidateRefreshTokensForDevice(ctx context.Context, deviceID
 	return err
 }
 
+const isEmailAvailable = `-- name: IsEmailAvailable :one
+select
+    not exists (
+        select
+            1
+        from
+            "user"
+        where
+            email = $1
+    )
+`
+
+func (q *Queries) IsEmailAvailable(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailAvailable, email)
+	var not_exists bool
+	err := row.Scan(&not_exists)
+	return not_exists, err
+}
+
 const lookupRefreshTokenByDevice = `-- name: LookupRefreshTokenByDevice :one
 select
     rts.user_id,

@@ -5,6 +5,60 @@
         "version": "2026-02-09"
     },
     "paths": {
+        "/api/v1/auth/email-available": {
+            "get": {
+                "description": "Check whether an email available for a user",
+                "operationId": "CheckEmailAvailable",
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "query",
+                        "description": "The email address query",
+                        "schema": {
+                            "type": "string",
+                            "description": "The email address query"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CheckEmailAvailable 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CheckEmailAvailableResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
         "/api/v1/auth/login/credential": {
             "post": {
                 "description": "This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token",
@@ -21,7 +75,7 @@
                 },
                 "parameters": [
                     {
-                        "name": "X-Device-Id",
+                        "name": "X-d-id",
                         "in": "header",
                         "description": "The client device's ID",
                         "schema": {
@@ -83,7 +137,10 @@
                         }
                     }
                 },
-                "security": []
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
             }
         },
         "/api/v1/auth/refresh": {
@@ -92,7 +149,7 @@
                 "operationId": "RotateAccessToken",
                 "parameters": [
                     {
-                        "name": "X-Device-Id",
+                        "name": "X-Refresh-Token",
                         "in": "header",
                         "schema": {
                             "type": "string"
@@ -100,7 +157,7 @@
                         "required": true
                     },
                     {
-                        "name": "X-Refresh-Token",
+                        "name": "X-d-Id",
                         "in": "header",
                         "schema": {
                             "type": "string"
@@ -149,7 +206,10 @@
                             }
                         }
                     }
-                }
+                },
+                "tags": [
+                    "Auth"
+                ]
             }
         },
         "/api/v1/auth/register/credential": {
@@ -201,12 +261,27 @@
                         }
                     }
                 },
-                "security": []
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
             }
         }
     },
     "components": {
         "schemas": {
+            "CheckEmailAvailableResponseContent": {
+                "type": "object",
+                "properties": {
+                    "available": {
+                        "type": "boolean",
+                        "description": "Whether the requested resource identifier is available or not"
+                    }
+                },
+                "required": [
+                    "available"
+                ]
+            },
             "ConflictErrorResponseContent": {
                 "type": "object",
                 "properties": {
@@ -246,7 +321,7 @@
                     },
                     "refreshToken": {
                         "type": "string",
-                        "description": "The refresh token for the client to obtain a new access token on expiration"
+                        "description": "The refresh token"
                     }
                 },
                 "required": [
@@ -270,13 +345,15 @@
                         "type": "string",
                         "maxLength": 100,
                         "minLength": 6,
-                        "description": "User password"
+                        "description": "User password",
+                        "format": "password"
                     },
                     "confirmPassword": {
                         "type": "string",
                         "maxLength": 100,
                         "minLength": 6,
-                        "description": "Password confirmation. MUST have value equal to the password value"
+                        "description": "Password confirmation. MUST have value equal to the password value",
+                        "format": "password"
                     }
                 },
                 "required": [
@@ -307,7 +384,7 @@
                     },
                     "refreshToken": {
                         "type": "string",
-                        "description": "The refresh token for the client to obtain a new access token on expiration"
+                        "description": "The refresh token"
                     }
                 },
                 "required": [

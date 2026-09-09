@@ -20,20 +20,10 @@ type ApiConfig struct {
 	SessionStore   sessions.Store
 }
 
-func MountApiV1(r *gin.RouterGroup, cfg ApiConfig) error {
+func MountApiV1(r *gin.RouterGroup) error {
 	ctx := context.TODO()
 
 	router := r.Group("/v1")
-	router.Use(middleware.RateLimiter())
-	router.Use(ginhelmet.Default())
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.AllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Device-Id"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
 
 	ioc.Invoke(ctx, func(c *controller.Auth) {
 		c.MountV1(router)
@@ -69,4 +59,17 @@ func SetupControllers() error {
 	ioc.Factory(controller.NewUserController, true)
 	ioc.NamedFactory("middleware.auth", middleware.RequireAuth)
 	return nil
+}
+
+func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
+	e.Use(middleware.RateLimiter())
+	e.Use(ginhelmet.Default())
+	e.Use(cors.New(cors.Config{
+		AllowOrigins:     origins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-D-Id", "X-Refresh-Token"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 }

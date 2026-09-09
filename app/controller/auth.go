@@ -162,7 +162,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 
 		sResult, err := auth.RotateAccessToken(c.Request.Context(), q.WithTx(tx), idg, t, auth.RotateAccessTokenInput{
 			Lifetime: a.refreshLifetime,
-			DeviceId: req.Deviceid,
+			DeviceId: req.DeviceId,
 			Hash:     req.RefreshToken,
 		})
 
@@ -185,11 +185,37 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// handleEmailExistsCheck checks whether a user exists with the specified email address
+func (a *Auth) handleEmailExistsCheck(c *gin.Context) {
+	queries := make(map[string]string)
+	if err := c.BindQuery(&queries); err != nil {
+		a.logger.Error("could not parse query parameters", "err", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		return
+	}
+
+	email, found := queries["email"]
+	if !found {
+		a.logger.Warn("no email provided in query")
+		c.JSON(http.StatusOK, gin.H{"available": false})
+		return
+	}
+
+	available, err := a.repo.IsEmailAvailable(c.Request.Context(), email)
+	if err != nil {
+		a.logger.Error("could not check for email availability", "err", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"available": available})
+}
+
 func (a *Auth) MountV1(r *gin.RouterGroup) {
 	router := r.Group("/auth")
 	router.POST("/login/credential", a.handleCredentialLogin)
 	router.POST("/register/credential", a.handleCredentialRegister)
 	router.GET("/refresh", a.handleAccessTokenRefresh)
+	router.GET("/email-available", a.handleEmailExistsCheck)
 }
 
 func NewAuthController(l *slog.Logger, q *db.Queries, cg infra.ConnProviderFunc) *Auth {

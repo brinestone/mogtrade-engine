@@ -3,6 +3,7 @@ namespace mogtrade.auth
 
 use smithy.api#readonly
 use aws.protocols#restJson1
+use mogtrade.core.types#AvailabilityOutput
 use mogtrade.core.types#ValidationError
 use mogtrade.core.types#EmailAddress
 use mogtrade.core.types#ConflictError
@@ -20,11 +21,22 @@ service Auth {
         ValidationError,
         InternalServerError
     ]
-    operations: [CredentialSignIn, CredentialSignUp, RotateAccessToken]
+    operations: [CredentialSignIn, CredentialSignUp, RotateAccessToken, CheckEmailAvailable]
 }
 
-@auth([httpBearerAuth])
+@auth([])
 @readonly
+@tags(["Auth"])
+@http(method:"GET", uri:"/api/v1/auth/email-available")
+@documentation("Check whether an email available for a user")
+operation CheckEmailAvailable{
+    input: CheckEmailAvailableInput
+    output: AvailabilityOutput
+}
+
+@readonly
+@tags(["Auth"])
+@auth([httpBearerAuth])
 @http(method: "GET", uri: "/api/v1/auth/refresh")
 @documentation("Rotate access token")
 operation RotateAccessToken {
@@ -41,11 +53,12 @@ structure RotateAccessTokenInput {
     @httpHeader("X-Refresh-Token")
     refreshToken: String
     @required
-    @httpHeader("X-Device-Id")
+    @httpHeader("X-d-Id")
     deviceId: String
 }
 
 @auth([])
+@tags(["Auth"])
 @http(method: "POST", uri: "/api/v1/auth/register/credential", code: 201)
 @documentation("Create user account using credentials")
 operation CredentialSignUp {
@@ -72,6 +85,7 @@ structure CredentialSignUpInput {
 }
 
 @auth([])
+@tags(["Auth"])
 @http(method: "POST", uri: "/api/v1/auth/login/credential")
 @documentation("This endpoint allows legitimate users to obtain a bearer JWT token and a corresponding refresh token")
 operation CredentialSignIn {
@@ -90,7 +104,7 @@ structure CredentialSignInInput {
     @required
     @documentation("The user's password")
     password: String
-    @httpHeader("X-Device-Id")
+    @httpHeader("X-d-id")
     @required
     @documentation("The client device's ID")
     deviceId: String
@@ -101,6 +115,14 @@ structure SignInOutput {
     @documentation("The access token (JWT) granted to the user")
     accessToken: String
     @required
-    @documentation("The refresh token for the client to obtain a new access token on expiration")
+    @documentation("The refresh token")
     refreshToken: String
+}
+
+@input
+structure CheckEmailAvailableInput {
+    @required
+    @documentation("The email address query")
+    @httpQuery("email")
+    email: String
 }

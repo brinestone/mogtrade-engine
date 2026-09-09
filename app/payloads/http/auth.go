@@ -3,7 +3,7 @@ package httppayloads
 type CredentialLoginRequest struct {
 	Username string `json:"email" form:"email" binding:"required,email"`
 	Password string `json:"password" form:"password" binding:"required"`
-	DeviceId string `header:"x-device-id"`
+	DeviceId string `header:"x-d-id"`
 }
 
 func (p CredentialLoginRequest) Validate() []string {
@@ -23,6 +23,6 @@ type CredentialSignUpRequest struct {
 }
 
 type RotateRefreshTokenRequest struct {
+	DeviceId     string `header:"x-d-id" binding:"required"`
 	RefreshToken string `header:"x-refresh-token" binding:"required"`
-	Deviceid     string `header:"x-device-id" binding:"required"`
 }

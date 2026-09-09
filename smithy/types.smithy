@@ -3,6 +3,13 @@ namespace mogtrade.core.types
 
 use smithy.api#readonly
 
+
+structure AvailabilityOutput {
+    @required
+    @documentation("Whether the requested resource identifier is available or not")
+    available: Boolean
+}
+
 @error("client")
 @httpError(409)
 structure ConflictError{
@@ -47,6 +54,7 @@ structure UnauthorizedError{
 @pattern("^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$")
 string EmailAddress
 
+@sensitive
 @length(min: 6, max: 100)
 string Password
 
