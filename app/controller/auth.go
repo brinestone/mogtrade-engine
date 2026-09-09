@@ -82,7 +82,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"accessToken": result})
+	c.JSON(http.StatusOK, result)
 	a.logger.Info("sign in successful, emitting event")
 	helpers.PublishEvent(c.Request.Context(), EventKeyUserSignedInV1, eventpayloads.UserSignedInEventArgs{
 		Timestamp:  time.Now().UTC(),
