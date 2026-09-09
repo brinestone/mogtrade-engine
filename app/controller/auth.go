@@ -82,8 +82,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("refresh-token", result.RefreshToken, int(a.refreshLifetime.Seconds()), "/api", os.Getenv("HOST"), false, true)
-	c.JSON(http.StatusOK, gin.H{"refreshToken": result.RefreshToken})
+	c.JSON(http.StatusOK, gin.H{"accessToken": result})
 	a.logger.Info("sign in successful, emitting event")
 	helpers.PublishEvent(c.Request.Context(), EventKeyUserSignedInV1, eventpayloads.UserSignedInEventArgs{
 		Timestamp:  time.Now().UTC(),
@@ -194,8 +193,7 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 
 	helpers.PublishEvent(c.Request.Context(), EventKeyRefreshTokenRotateV1, nil) // TODO: make an event arg for this
 	a.logger.Info("refresh token rotated successfully!")
-	c.SetCookie("refresh-token", result.RefreshToken, int(a.refreshLifetime.Seconds()), "/api", os.Getenv("HOST"), false, true)
-	c.JSON(http.StatusOK, gin.H{"accessToken": result.AccessToken})
+	c.JSON(http.StatusOK, result)
 }
 
 // handleEmailExistsCheck checks whether a user exists with the specified email address

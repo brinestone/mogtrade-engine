@@ -318,10 +318,15 @@
                     "accessToken": {
                         "type": "string",
                         "description": "The access token (JWT) granted to the user"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "The refresh token"
                     }
                 },
                 "required": [
-                    "accessToken"
+                    "accessToken",
+                    "refreshToken"
                 ]
             },
             "CredentialSignUpRequestContent": {
@@ -376,10 +381,15 @@
                     "accessToken": {
                         "type": "string",
                         "description": "The access token (JWT) granted to the user"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "The refresh token"
                     }
                 },
                 "required": [
-                    "accessToken"
+                    "accessToken",
+                    "refreshToken"
                 ]
             },
             "UnauthorizedErrorResponseContent": {
