@@ -49,6 +49,7 @@ func (c *CronJobScheduler) Start() {
 	for _, job := range c.jobs {
 		schedule, _ := job.Schedule().(string)
 		if _, err := c.cron.AddFunc(schedule, func() {
+			c.logger.Debug("starting job", "job", job.Name())
 			if err := job.Run(c.context); err != nil {
 				c.logger.Error("job error", "err", err.Error(), "job", job.Name())
 			} else {

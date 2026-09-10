@@ -1,4 +1,4 @@
-package datasource
+package feed
 
 import (
 	"encoding/json"
@@ -34,6 +34,10 @@ type AlphaVantageConfig struct {
 type AlphaVantageDatasource struct {
 	apiKey string
 	AlphaVantageConfig
+}
+
+func (ds *AlphaVantageDatasource) Name() string {
+	return "alphavantage"
 }
 
 func (ds *AlphaVantageDatasource) newClient() *http.Client {
@@ -115,7 +119,10 @@ func (ds *AlphaVantageDatasource) Pull(query DatasourceQueryRequest) (entries []
 		timeFormat = "2006-01-02 15:04:05"
 	}
 
-	timeSeries := result[key].(map[string]any)
+	timeSeries, ok := result[key].(map[string]any)
+	if !ok {
+		return
+	}
 
 	for key, value := range timeSeries {
 		timestamp, err := time.Parse(timeFormat, key)

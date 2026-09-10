@@ -1,4 +1,4 @@
-package datasource
+package feed
 
 type DatasourceQueryRequestInterval string
 
@@ -17,4 +17,5 @@ type DatasourceQueryRequest struct {
 }
 type Datasource interface {
 	Pull(query DatasourceQueryRequest) ([]FeedEntry, error)
+	Name() string
 }
