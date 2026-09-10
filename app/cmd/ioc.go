@@ -238,6 +238,19 @@ func bootstrapApplication(ctx context.Context) {
 	}
 }
 func startAsyncTasks(ctx context.Context) {
+	pool, err := ioc.Get[*pgxpool.Pool](ctx)
+	if err != nil {
+		panic(err)
+	}
+	l, err := ioc.Get[*slog.Logger](ctx)
+	if err != nil {
+		panic(err)
+	}
+	idg, err := ioc.Get[contract.IdGeneratorFunc](ctx)
+	if err != nil {
+		panic(err)
+	}
+	performSeeding(ctx, *pool, *l, *idg)
 	startJobScheduler(ctx)
 	go pullMarketFeed(ctx)
 }
