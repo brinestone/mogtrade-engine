@@ -35,6 +35,8 @@ func CreateUserWallet(ctx context.Context, q *db.Queries, idg contract.IdGenerat
 			StartingBalance: decimal.NewNullDecimal(balance),
 		})
 	}
-
-	return err
+	if err != nil {
+		return err
+	}
+	return q.RefreshWalletSnapshots(ctx)
 }

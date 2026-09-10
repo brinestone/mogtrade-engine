@@ -46,6 +46,7 @@ type CredentialSignUpInput struct {
 	Identifier string
 	Password   string
 	Email      string
+	Photo      string
 }
 
 type RotateAccessTokenInput struct {
@@ -116,7 +117,16 @@ func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.Id
 
 	userId := idg()
 	accountId := idg()
-	timestamp, err := q.CreateUser(ctx, db.CreateUserParams{ID: userId, Name: csi.Name, Email: csi.Email})
+	var imagePtr *string = &csi.Photo
+	if len(csi.Photo) == 0 {
+		imagePtr = nil
+	}
+	timestamp, err := q.CreateUser(ctx, db.CreateUserParams{
+		ID:    userId,
+		Name:  csi.Name,
+		Email: csi.Email,
+		Image: imagePtr,
+	})
 	if err != nil {
 		return SignUpResult{}, err
 	}
