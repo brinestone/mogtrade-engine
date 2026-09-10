@@ -1,3 +1,6 @@
+-- name: RefreshWalletSnapshots :exec
+refresh materialized view wallet_snapshots;
+
 -- name: CreateVirtualWallet :exec
 insert into
     wallets ("type", id, "owner", starting_balance)

@@ -2,15 +2,20 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/contract"
+	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/web/controller"
 	"github.com/brinestone/mogtrade/web/middleware"
 	"github.com/danielkov/gin-helmet/ginhelmet"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 	"go-slim.dev/ioc"
 )
 
@@ -51,7 +56,9 @@ func mountHealth(r *gin.RouterGroup) {
 func SetupControllers() error {
 	ioc.Factory(controller.NewOrdersController, true)
 	ioc.Factory(controller.NewAuthController, true)
-	ioc.Factory(controller.NewWalletsController, true)
+	ioc.Factory(func(r *db.Queries, l *slog.Logger, p *pgxpool.Pool, idg contract.IdGeneratorFunc) *controller.Wallets {
+		return controller.NewWalletsController(r, l, p, decimal.NewFromFloat(100_000), decimal.Zero, idg)
+	}, true)
 	ioc.Factory(controller.NewUserController, true)
 	ioc.NamedFactory("middleware.auth", middleware.RequireAuth)
 	return nil

@@ -74,6 +74,15 @@ func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID *stri
 	return i, err
 }
 
+const refreshWalletSnapshots = `-- name: RefreshWalletSnapshots :exec
+refresh materialized view wallet_snapshots
+`
+
+func (q *Queries) RefreshWalletSnapshots(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, refreshWalletSnapshots)
+	return err
+}
+
 const userHasWallet = `-- name: UserHasWallet :one
 select
     exists (

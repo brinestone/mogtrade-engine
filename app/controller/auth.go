@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -113,6 +114,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 			Identifier: request.Email,
 			Password:   request.Password,
 			Email:      request.Email,
+			Photo:      fmt.Sprintf("https://api.dicebear.com/10.x/initials/svg?seed=%s", request.Initials()),
 		})
 		if err != nil {
 			tx.Rollback(c.Request.Context())
@@ -131,7 +133,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 	}
 
 	_, err = ioc.Invoke(c.Request.Context(), func(bus events.EventBus) {
-		bus.Publish(EventKeyUserCreatedV1, eventpayloads.UserCreatedEventArgs{
+		go bus.Publish(EventKeyUserCreatedV1, eventpayloads.UserCreatedEventArgs{
 			UserId:    result.UserId,
 			Timestamp: result.Timestamp,
 		})
