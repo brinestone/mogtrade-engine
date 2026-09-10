@@ -19,7 +19,7 @@ func NewExchangePoller(l *slog.Logger, hub *ExchangeHub, sources []feed.Datasour
 }
 
 func (p *ExchangePoller) Start(ctx context.Context) {
-	p.logger.Info("pulling from exchanges", "exchange-count", len(p.exchanges))
+	p.logger.Debug("pulling from exchanges", "exchange-count", len(p.exchanges))
 	ticker := time.NewTicker(50 * time.Second)
 	defer ticker.Stop()
 
@@ -28,7 +28,7 @@ func (p *ExchangePoller) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.logger.Info("polling exchanges, not implemented actually", "exchange-count", len(p.exchanges))
+			p.logger.Debug("polling exchanges, not implemented actually", "exchange-count", len(p.exchanges))
 			// for _, exchange := range p.exchanges {
 			// 	res, err := exchange.Pull(feed.DatasourceQueryRequest{
 			// 		Interval: feed.IVDay,

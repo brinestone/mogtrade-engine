@@ -8,7 +8,7 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-// MassiveConfig holds configuration for the Massive datasource.
+// MassiveConfig holds configuration for the Massive datasource
 type MassiveConfig struct {
 	RequestTimeout time.Duration
 }
@@ -16,7 +16,7 @@ type MassiveConfig struct {
 // MassiveDatasource implements the feed.Datasource interface for Massive (formerly Polygon)
 // using the official polygon.io client-go SDK.
 type MassiveDatasource struct {
-	apiKey    string
+	apiKey string
 	MassiveConfig
 }
 
@@ -40,11 +40,11 @@ func (ds *MassiveDatasource) Pull(query DatasourceQueryRequest) (entries []FeedE
 
 	// Create params for the ListAggs call
 	params := &models.ListAggsParams{
-		Ticker:    query.Symbol,
+		Ticker:     query.Symbol,
 		Multiplier: 1,
-		Timespan:  timespan,
-		From:      models.Millis(time.UnixMilli(yesterday.UnixMilli())),
-		To:          models.Millis(time.UnixMilli(now.UnixMilli())),
+		Timespan:   timespan,
+		From:       models.Millis(time.UnixMilli(yesterday.UnixMilli())),
+		To:         models.Millis(time.UnixMilli(now.UnixMilli())),
 		// Not adjusting for splits by default to get raw prices
 		Adjusted: ptr(false),
 	}
@@ -95,7 +95,7 @@ func ptr[T any](v T) *T {
 // NewMassiveDatasource creates a new MassiveDatasource with the given API key and configuration.
 func NewMassiveDatasource(apikey string, config MassiveConfig) Datasource {
 	ds := &MassiveDatasource{
-		apiKey:    apikey,
+		apiKey:        apikey,
 		MassiveConfig: config,
 	}
 	return ds

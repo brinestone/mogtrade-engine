@@ -238,12 +238,6 @@ func bootstrapApplication(ctx context.Context) {
 	}
 }
 func startAsyncTasks(ctx context.Context) {
-	go pullMarketFeed(ctx)
 	startJobScheduler(ctx)
-	go func() {
-		<-ctx.Done()
-		ioc.Invoke(context.TODO(), func(l *slog.Logger) {
-			l.Info("shutting down...")
-		})
-	}()
+	go pullMarketFeed(ctx)
 }
