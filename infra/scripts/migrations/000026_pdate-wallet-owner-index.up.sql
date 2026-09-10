@@ -1,0 +1,1 @@
+drop index wallets_owner_uidx;
