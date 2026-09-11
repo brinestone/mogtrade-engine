@@ -11,6 +11,10 @@ import (
 	"go-slim.dev/ioc"
 )
 
+func GetSystemUserId() string {
+	return os.Getenv("SYSTEM_USER_ID")
+}
+
 func GetCurrentUserId(c *gin.Context) string {
 	return c.GetString("uid")
 }

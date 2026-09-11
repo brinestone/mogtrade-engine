@@ -1,3 +1,22 @@
+-- name: UserExistsWithId :one
+select
+    exists (
+        select
+            1
+        from
+            "user"
+        where
+            id = $1
+    );
+
+-- name: VerifyUserEmail :exec
+update "user"
+set
+    email_verified = true,
+    updated_at = now()
+WHERE
+    id = $1;
+
 -- name: IsEmailAvailable :one
 select
     not exists (

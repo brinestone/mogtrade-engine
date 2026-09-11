@@ -274,3 +274,36 @@ func (q *Queries) RemoveStaleRefreshTokens(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, removeStaleRefreshTokens)
 	return err
 }
+
+const userExistsWithId = `-- name: UserExistsWithId :one
+select
+    exists (
+        select
+            1
+        from
+            "user"
+        where
+            id = $1
+    )
+`
+
+func (q *Queries) UserExistsWithId(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, userExistsWithId, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const verifyUserEmail = `-- name: VerifyUserEmail :exec
+update "user"
+set
+    email_verified = true,
+    updated_at = now()
+WHERE
+    id = $1
+`
+
+func (q *Queries) VerifyUserEmail(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, verifyUserEmail, id)
+	return err
+}

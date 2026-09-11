@@ -24,6 +24,7 @@ Use the standard golang commands for running and testing
 
 ## Code style
 - Never use `interface{}` type, but the `any` type where needed.
+- Use the `new(any)` built-in function that returns a pointer to the value passed, to obtain a pointer to a value.
 
 ## Ignored files
 The following files/directories should not be accessed at all costs
