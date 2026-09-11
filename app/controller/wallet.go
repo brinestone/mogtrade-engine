@@ -27,9 +27,9 @@ type Wallets struct {
 	idGenerator      contract.IdGeneratorFunc
 }
 
-func onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, l *slog.Logger, pool *pgxpool.Pool, vsb decimal.Decimal, rsb decimal.Decimal, e eventpayloads.UserCreatedEventArgs) error {
+func onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, l *slog.Logger, pool *pgxpool.Pool, vsb decimal.Decimal, e eventpayloads.UserCreatedEventArgs) error {
 	l.Info("creating wallet for new user")
-	timedC, cancel := context.WithTimeout(ctx, time.Second*5)
+	timedC, cancel := context.WithTimeout(ctx, time.Minute*30)
 	defer cancel()
 
 	l.Debug("opening transaction")
@@ -41,19 +41,53 @@ func onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, l *slog.Lo
 	defer tx.Rollback(timedC)
 
 	repo := db.New(tx)
-	err = billing.CreateUserWallet(timedC, repo, idg, e.UserId, db.WalletTypeReal, rsb)
+	realId := idg()
+	vId := idg()
+	err = billing.CreateUserWallet(timedC, repo, billing.CreateWalletParams{
+		OwnerId: e.UserId,
+		Type:    db.WalletTypeReal,
+		Id:      realId,
+	})
 	if err == nil {
 		l.Info("wallet created successfully", "type", db.WalletTypeReal)
 	} else {
 		l.Warn("failed to create wallet for user", "err", err.Error())
 	}
 
-	err = billing.CreateUserWallet(timedC, repo, idg, e.UserId, db.WalletTypeVirtual, vsb)
+	err = billing.CreateUserWallet(timedC, repo, billing.CreateWalletParams{
+		OwnerId: e.UserId,
+		Type:    db.WalletTypeVirtual,
+		Id:      vId,
+	})
+	if err != nil {
+		l.Warn("failed to create wallet for user", "err", err.Error(), "type", db.WalletTypeVirtual)
+		return err
+	}
+
+	txId := idg()
+	err = billing.CreditUserWallet(ctx, repo, billing.RecordWalletTransactionParams{
+		Id:               txId,
+		Src:              new(helpers.GetSystemVirtualWalletId()),
+		Dest:             &vId,
+		Intent:           "initial deposit",
+		ExtraData:        make(map[string]any),
+		IdempotencyToken: idg(),
+		DoneBy:           helpers.GetSystemUserId(),
+		TracingId:        idg(),
+		Currency:         "USD",
+		ExchangeRate:     decimal.NewFromInt(1),
+		Value:            vsb,
+	})
+	if err != nil {
+		return err
+	}
+	err = billing.UpdateWalletTransactionStatus(ctx, repo, billing.UpdateTransactionStatusParams{
+		TransactionId: txId,
+		Status:        db.TransactionStatusCompleted,
+	})
 	if err == nil {
 		tx.Commit(timedC)
 		l.Info("wallet created successfully", "type", db.WalletTypeVirtual)
-	} else {
-		l.Warn("failed to create wallet for user", "err", err.Error(), "type", db.WalletTypeVirtual)
 	}
 
 	return err
@@ -81,7 +115,7 @@ func (w *Wallets) subscribeToEventsV1(eb events.EventBus) {
 				w.logger.Warn("event payload is not of type eventpayloads.UserCreatedEventArgs")
 				continue
 			}
-			err := onUserCreated(eb.Context(), idg, l, p, vsb, rsb, ev)
+			err := onUserCreated(eb.Context(), idg, l, p, vsb, ev)
 			if err != nil {
 				l.Error("event handler failed", "err", err.Error(), "event", EventKeyUserCreatedV1)
 			}

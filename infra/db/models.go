@@ -140,6 +140,50 @@ func (ns NullOrderType) Value() (driver.Value, error) {
 	return string(ns.OrderType), nil
 }
 
+type TransactionStatus string
+
+const (
+	TransactionStatusProcessing TransactionStatus = "processing"
+	TransactionStatusFailed     TransactionStatus = "failed"
+	TransactionStatusCancelled  TransactionStatus = "cancelled"
+	TransactionStatusCompleted  TransactionStatus = "completed"
+)
+
+func (e *TransactionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TransactionStatus(s)
+	case string:
+		*e = TransactionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TransactionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTransactionStatus struct {
+	TransactionStatus TransactionStatus
+	Valid             bool // Valid is true if TransactionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTransactionStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TransactionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TransactionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTransactionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TransactionStatus), nil
+}
+
 type WalletType string
 
 const (
@@ -215,7 +259,24 @@ type WalletSnapshot struct {
 	StartingBalance   decimal.NullDecimal
 	CurrentBalance    decimal.Decimal
 	TotalTransactions int64
-	LastActivityAt    pgtype.Timestamptz
-	SnapshotCreatedAt pgtype.Timestamptz
+	LastActivityAt    interface{}
+	SnapshotCreatedAt interface{}
 	WalletType        WalletType
+}
+
+type WalletTransaction struct {
+	ID               string
+	Value            decimal.Decimal
+	Src              *string
+	Dest             *string
+	Intent           *string
+	RecordedAt       pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	ExtraData        []byte
+	IdempotencyToken string
+	DoneBy           *string
+	TracingID        string
+	Currency         *string
+	ExchangeRate     decimal.Decimal
+	Status           TransactionStatus
 }

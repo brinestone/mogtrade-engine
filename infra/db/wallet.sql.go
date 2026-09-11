@@ -29,6 +29,24 @@ func (q *Queries) CreateRealWallet(ctx context.Context, arg CreateRealWalletPara
 	return err
 }
 
+const createTransactionLedgerEntry = `-- name: CreateTransactionLedgerEntry :exec
+insert into
+    wallet_ledger_entries (wallet, "transaction", notes)
+values
+    ($1, $2, $3)
+`
+
+type CreateTransactionLedgerEntryParams struct {
+	Wallet      *string
+	Transaction string
+	Notes       string
+}
+
+func (q *Queries) CreateTransactionLedgerEntry(ctx context.Context, arg CreateTransactionLedgerEntryParams) error {
+	_, err := q.db.Exec(ctx, createTransactionLedgerEntry, arg.Wallet, arg.Transaction, arg.Notes)
+	return err
+}
+
 const createVirtualWallet = `-- name: CreateVirtualWallet :exec
 insert into
     wallets ("type", id, "owner", starting_balance)
@@ -74,12 +92,131 @@ func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID *stri
 	return i, err
 }
 
+const findWalletTransactionById = `-- name: FindWalletTransactionById :one
+select
+    id, value, src, dest, intent, recorded_at, updated_at, extra_data, idempotency_token, done_by, tracing_id, currency, exchange_rate, status
+from
+    wallet_transactions
+where
+    id = $1
+`
+
+func (q *Queries) FindWalletTransactionById(ctx context.Context, id string) (WalletTransaction, error) {
+	row := q.db.QueryRow(ctx, findWalletTransactionById, id)
+	var i WalletTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.Value,
+		&i.Src,
+		&i.Dest,
+		&i.Intent,
+		&i.RecordedAt,
+		&i.UpdatedAt,
+		&i.ExtraData,
+		&i.IdempotencyToken,
+		&i.DoneBy,
+		&i.TracingID,
+		&i.Currency,
+		&i.ExchangeRate,
+		&i.Status,
+	)
+	return i, err
+}
+
+const idempotencyKeyExists = `-- name: IdempotencyKeyExists :one
+select
+    exists (
+        select
+            1
+        from
+            wallet_transactions
+        where
+            idempotency_token = $1
+    )
+`
+
+func (q *Queries) IdempotencyKeyExists(ctx context.Context, idempotencyToken string) (bool, error) {
+	row := q.db.QueryRow(ctx, idempotencyKeyExists, idempotencyToken)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const recordWalletTransaction = `-- name: RecordWalletTransaction :exec
+insert into
+    wallet_transactions (
+        id,
+        "value",
+        src,
+        dest,
+        intent,
+        extra_data,
+        idempotency_token,
+        done_by,
+        tracing_id,
+        currency,
+        exchange_rate
+    )
+values
+    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+`
+
+type RecordWalletTransactionParams struct {
+	ID               string
+	Value            decimal.Decimal
+	Src              *string
+	Dest             *string
+	Intent           *string
+	ExtraData        []byte
+	IdempotencyToken string
+	DoneBy           *string
+	TracingID        string
+	Currency         *string
+	ExchangeRate     decimal.Decimal
+}
+
+func (q *Queries) RecordWalletTransaction(ctx context.Context, arg RecordWalletTransactionParams) error {
+	_, err := q.db.Exec(ctx, recordWalletTransaction,
+		arg.ID,
+		arg.Value,
+		arg.Src,
+		arg.Dest,
+		arg.Intent,
+		arg.ExtraData,
+		arg.IdempotencyToken,
+		arg.DoneBy,
+		arg.TracingID,
+		arg.Currency,
+		arg.ExchangeRate,
+	)
+	return err
+}
+
 const refreshWalletSnapshots = `-- name: RefreshWalletSnapshots :exec
 refresh materialized view wallet_snapshots
 `
 
 func (q *Queries) RefreshWalletSnapshots(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, refreshWalletSnapshots)
+	return err
+}
+
+const updateTransactionStatusById = `-- name: UpdateTransactionStatusById :exec
+update wallet_transactions
+set
+    status = $1,
+    updated_at = now()
+where
+    id = $2
+`
+
+type UpdateTransactionStatusByIdParams struct {
+	Status TransactionStatus
+	ID     string
+}
+
+func (q *Queries) UpdateTransactionStatusById(ctx context.Context, arg UpdateTransactionStatusByIdParams) error {
+	_, err := q.db.Exec(ctx, updateTransactionStatusById, arg.Status, arg.ID)
 	return err
 }
 
