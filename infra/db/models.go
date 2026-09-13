@@ -256,11 +256,11 @@ type User struct {
 type WalletSnapshot struct {
 	WalletID          string
 	OwnerID           *string
-	StartingBalance   decimal.NullDecimal
+	StartingBalance   decimal.Decimal
 	CurrentBalance    decimal.Decimal
 	TotalTransactions int64
-	LastActivityAt    interface{}
-	SnapshotCreatedAt interface{}
+	LastActivityAt    pgtype.Timestamptz
+	SnapshotCreatedAt pgtype.Timestamptz
 	WalletType        WalletType
 }
 

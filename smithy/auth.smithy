@@ -1,35 +1,41 @@
 $version: "2"
+
 namespace mogtrade.auth
 
-use smithy.api#readonly
 use aws.protocols#restJson1
 use mogtrade.core.types#AvailabilityOutput
-use mogtrade.core.types#ValidationError
-use mogtrade.core.types#EmailAddress
 use mogtrade.core.types#ConflictError
+use mogtrade.core.types#EmailAddress
 use mogtrade.core.types#InternalServerError
-use mogtrade.core.types#UnprocessibleError
-use mogtrade.core.types#UnauthorizedError
 use mogtrade.core.types#Password
+use mogtrade.core.types#UnauthorizedError
+use mogtrade.core.types#UnprocessibleError
+use mogtrade.core.types#ValidationError
+use smithy.api#readonly
 
 @restJson1
 @httpBearerAuth
 @title("MogTrade Authentication")
 service Auth {
-    version: "2026-02-09"
+    version: "1.0.0"
     errors: [
-        ValidationError,
+        ValidationError
         InternalServerError
     ]
-    operations: [CredentialSignIn, CredentialSignUp, RotateAccessToken, CheckEmailAvailable]
+    operations: [
+        CredentialSignIn
+        CredentialSignUp
+        RotateAccessToken
+        CheckEmailAvailable
+    ]
 }
 
 @auth([])
 @readonly
 @tags(["Auth"])
-@http(method:"GET", uri:"/api/v1/auth/email-available")
+@http(method: "GET", uri: "/api/v1/auth/email-available")
 @documentation("Check whether an email available for a user")
-operation CheckEmailAvailable{
+operation CheckEmailAvailable {
     input: CheckEmailAvailableInput
     output: AvailabilityOutput
 }
@@ -52,6 +58,7 @@ structure RotateAccessTokenInput {
     @required
     @httpHeader("X-Refresh-Token")
     refreshToken: String
+
     @required
     @httpHeader("X-d-Id")
     deviceId: String
@@ -64,7 +71,7 @@ structure RotateAccessTokenInput {
 operation CredentialSignUp {
     input: CredentialSignUpInput
     errors: [
-        ConflictError,
+        ConflictError
     ]
 }
 
@@ -73,12 +80,15 @@ structure CredentialSignUpInput {
     @required
     @documentation("The names of the user")
     names: String
+
     @required
     @documentation("The email address of the user. MUST be unique")
     email: EmailAddress
+
     @required
     @documentation("User password")
     password: Password
+
     @required
     @documentation("Password confirmation. MUST have value equal to the password value")
     confirmPassword: Password
@@ -92,18 +102,21 @@ operation CredentialSignIn {
     input: CredentialSignInInput
     output: SignInOutput
     errors: [
-        UnprocessibleError,
-        UnauthorizedError,
+        UnprocessibleError
+        UnauthorizedError
     ]
 }
+
 @input
 structure CredentialSignInInput {
     @required
     @documentation("The user's identifying email address")
     email: EmailAddress
+
     @required
     @documentation("The user's password")
     password: String
+
     @httpHeader("X-d-id")
     @required
     @documentation("The client device's ID")
@@ -114,6 +127,7 @@ structure SignInOutput {
     @required
     @documentation("The access token (JWT) granted to the user")
     accessToken: String
+
     @required
     @documentation("The refresh token")
     refreshToken: String

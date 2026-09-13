@@ -44,13 +44,13 @@ with
 select
     w.id as wallet_id,
     w."owner" as owner_id,
-    w.starting_balance,
+    coalesce(w.starting_balance, 0)::numeric(18,4) as starting_balance,
     (
         w.starting_balance + coalesce(t.current_balance, 0)
     )::numeric(18, 4) as current_balance,
-    coalesce(t.total_transactions, 0) as total_transactions,
-    t.last_activity_at,
-    now() as snapshot_created_at,
+    coalesce(t.total_transactions, 0)::bigint as total_transactions,
+    t.last_activity_at::timestamptz as last_activity_at,
+    now()::timestamptz as snapshot_created_at,
     w."type" as wallet_type
 from
     wallets w
