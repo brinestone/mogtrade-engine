@@ -72,12 +72,18 @@ FROM
     wallet_snapshots
 WHERE
     owner_id = $1
+    and wallet_type = $2
 LIMIT
     1
 `
 
-func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, ownerID *string) (WalletSnapshot, error) {
-	row := q.db.QueryRow(ctx, findWalletSnapshotByOwnerId, ownerID)
+type FindWalletSnapshotByOwnerIdParams struct {
+	OwnerID    *string
+	WalletType WalletType
+}
+
+func (q *Queries) FindWalletSnapshotByOwnerId(ctx context.Context, arg FindWalletSnapshotByOwnerIdParams) (WalletSnapshot, error) {
+	row := q.db.QueryRow(ctx, findWalletSnapshotByOwnerId, arg.OwnerID, arg.WalletType)
 	var i WalletSnapshot
 	err := row.Scan(
 		&i.WalletID,

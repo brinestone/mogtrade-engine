@@ -1,6 +1,5 @@
-build/smithy/source/build-info
-build/smithy/source/sources
-build/smithy/source/model/
+build/smithy/
+!build/smithy/*/openapi/
 .env
 .vfox/
 tmp

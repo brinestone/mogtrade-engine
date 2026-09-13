@@ -83,5 +83,6 @@ FROM
     wallet_snapshots
 WHERE
     owner_id = $1
+    and wallet_type = $2
 LIMIT
     1;

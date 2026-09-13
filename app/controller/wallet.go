@@ -2,8 +2,10 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/brinestone/mogtrade/core/contract"
@@ -12,10 +14,15 @@ import (
 	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
+	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"go-slim.dev/ioc"
+)
+
+var (
+	PayloadWalletNotFound = gin.H{"error": "wallet not found"}
 )
 
 type Wallets struct {
@@ -94,15 +101,31 @@ func onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, l *slog.Lo
 }
 
 func (w *Wallets) handleGetBalance(c *gin.Context) {
-	// TODO: stub
-	user, _ := helpers.GetCurrentUser(c)
-	c.JSON(http.StatusOK, gin.H{"user": user})
+	var req httppayloads.GetWalletSnapshotRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
+		return
+	}
+	snapshot, err := billing.GetCurrentWalletSnapshot(c.Request.Context(), w.repo, billing.GetWalletSnapshotParams{
+		Type:    req.Type,
+		OwnerId: helpers.GetCurrentUserId(c),
+	})
+	if err != nil {
+		if errors.Is(err, billing.ErrWalletNotFound) {
+			w.logger.Warn("user wallet not found", "uid", helpers.GetCurrentUserId(c), "type", req.Type)
+			c.AbortWithStatusJSON(http.StatusNotFound, PayloadWalletNotFound)
+			return
+		}
+		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		return
+	}
+	c.JSON(http.StatusOK, httppayloads.WalletSnapshotPayload(snapshot))
 }
 
 func (w *Wallets) MountV1(r *gin.RouterGroup) {
 	authMiddleware := helpers.ProvideAuthMiddleware()
 	router := r.Group("/wallet", authMiddleware)
-	router.GET("/", w.handleGetBalance)
+	router.GET("/:type", w.handleGetBalance)
 	ioc.Invoke(context.TODO(), w.subscribeToEventsV1)
 }
 

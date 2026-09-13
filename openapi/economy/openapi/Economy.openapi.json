@@ -1,0 +1,150 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Mogtrade Economy",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/api/v1/wallet/{type}": {
+            "get": {
+                "operationId": "GetWalletInfo",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "schema": {
+                            "$ref": "#/components/schemas/WalletType"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetWalletInfo 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetWalletInfoResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Economy"
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "GetWalletInfoResponseContent": {
+                "type": "object",
+                "properties": {
+                    "balance": {
+                        "type": "string",
+                        "pattern": "^[0-9]{0,14}\\.?[0-9]{1,4}$"
+                    },
+                    "id": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "totalTransactions": {
+                        "type": "number"
+                    },
+                    "lastActivityAt": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                }
+            },
+            "InternalServerErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "The error message from the server"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "UnauthorizedErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "ValidationErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "A list of validation messages"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "WalletType": {
+                "type": "string",
+                "enum": [
+                    "virtual",
+                    "real"
+                ]
+            }
+        },
+        "securitySchemes": {
+            "smithy.api.httpBearerAuth": {
+                "type": "http",
+                "description": "HTTP Bearer authentication",
+                "scheme": "Bearer"
+            }
+        }
+    },
+    "security": [
+        {
+            "smithy.api.httpBearerAuth": []
+        }
+    ]
+}

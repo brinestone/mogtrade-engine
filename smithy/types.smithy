@@ -1,8 +1,6 @@
 $version: "2"
+
 namespace mogtrade.core.types
-
-use smithy.api#readonly
-
 
 structure AvailabilityOutput {
     @required
@@ -12,7 +10,7 @@ structure AvailabilityOutput {
 
 @error("client")
 @httpError(409)
-structure ConflictError{
+structure ConflictError {
     @required
     @documentation("The error message from the server")
     error: String
@@ -34,10 +32,9 @@ structure InternalServerError {
     error: String
 }
 
-
 @error("client")
 @httpError(422)
-structure UnprocessibleError{
+structure UnprocessibleError {
     @required
     @documentation("A list of validation messages")
     error: ErrorMessages
@@ -45,11 +42,13 @@ structure UnprocessibleError{
 
 @error("client")
 @httpError(401)
-structure UnauthorizedError{
+structure UnauthorizedError {
     @required
     error: String
 }
 
+@pattern("^[0-9A-HJKMNP-TV-Z]{26}$")
+string ResourceId
 
 @pattern("^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$")
 string EmailAddress
@@ -60,4 +59,11 @@ string Password
 
 list ErrorMessages {
     member: String
+}
+
+@error("client")
+@httpError(404)
+@documentation("A resource was not found")
+structure NotFoundError {
+    error: String
 }

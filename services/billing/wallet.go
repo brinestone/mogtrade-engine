@@ -16,6 +16,7 @@ var (
 	ErrDuplicateIdempotencyKey      = errors.New("idempotency token already exists")
 	ErrNoWalletTransaction          = errors.New("wallet transaction was not found")
 	ErrInvalidTransactionTransition = errors.New("invalid wallet transaction transition")
+	ErrWalletNotFound               = errors.New("error not found")
 )
 
 type RecordWalletTransactionParams struct {
@@ -42,6 +43,26 @@ type CreateWalletParams struct {
 type UpdateTransactionStatusParams struct {
 	TransactionId string
 	Status        db.TransactionStatus
+}
+
+type GetWalletSnapshotParams struct {
+	Type    db.WalletType
+	OwnerId string
+}
+
+func GetCurrentWalletSnapshot(ctx context.Context, q *db.Queries, params GetWalletSnapshotParams) (db.WalletSnapshot, error) {
+	snapshot, err := q.FindWalletSnapshotByOwnerId(ctx, db.FindWalletSnapshotByOwnerIdParams{
+		OwnerID:    &params.OwnerId,
+		WalletType: params.Type,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.WalletSnapshot{}, ErrWalletNotFound
+		}
+		return db.WalletSnapshot{}, err
+	}
+
+	return snapshot, nil
 }
 
 func UpdateWalletTransactionStatus(ctx context.Context, q *db.Queries, params UpdateTransactionStatusParams) error {
