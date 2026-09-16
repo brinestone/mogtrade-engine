@@ -6,3 +6,5 @@ tmp
 logs
 __debug*
 .idea/
+node_modules
+mcp/build/
