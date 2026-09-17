@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+        "mogtrade-dev-mcp": {
+            "command": "npx",
+            "args": [
+                "tsx",
+                "mcp/src/index.ts"
+            ],
+            "cwd": ".",
+            "envFile": "app/cmd/.env"
+        }
+    }
+}

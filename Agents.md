@@ -1,7 +1,7 @@
 # MogTrade Engine
 
 ## Project Description
-This project implements a trading platform's enging called MogTrade. It exposes a RESTful API for frontends and clients to connect to and permit users place trade orders on the connected stock market exchanges.
+This project implements a trading platform's engine called MogTrade. It exposes a RESTful API for frontends and clients to connect to and permit users place trade orders on the connected stock market exchanges.
 
 ## Project Structure
 The project is divided into golang modules under the following directories
@@ -15,9 +15,9 @@ The project also contains the `go.work` and `go.sum` files which link the differ
 ## Development Tools
 This project uses several popular development tools like
 - **`sqlc`**: For generating domain data models and query functions
-- **`golang-migrate`**: For database migration in postgres
 - **`smithy`**: For creating and managing REST api documentation.
 - **`air`**: For running local development application. It's description can be found in the .air.toml
+- **`mcp server`**: Use the `mogtrade-dev-mcp` MCP server (located at `.vscode/mcp.json` or `.mcp.json`) for database migration file generation.
 
 ## Build and test commands
 Use the standard golang commands for running and testing
