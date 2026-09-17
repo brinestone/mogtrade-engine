@@ -1,0 +1,15 @@
+{
+    "servers": {
+        "mogtrade-engine-docs": {
+            "command": "go",
+            "args": [
+                "run",
+                "mcp/main.go"
+            ],
+            "cwd": ".",
+            "env": {
+                "CGO_ENABLED": "0"
+            }
+        }
+    }
+}

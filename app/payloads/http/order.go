@@ -12,7 +12,7 @@ type PlaceOrderPayload struct {
 	LimitPrice       decimal.NullDecimal `json:"limitPrice" form:"limitPrice" xml:"limit-price"`
 	StopPrice        decimal.NullDecimal `json:"stopPrice" form:"stopPrice" xml:"stop-price"`
 	IdempotencyToken string              `header:"X-Idempotency-Token" `
-	Quantity         float32             `json:"quantity" form:"quantity" xml:"quantity" binding:"required,gt=3"`
+	Quantity         float32             `json:"quantity" form:"quantity" xml:"quantity" binding:"required"`
 }
 
 func (p PlaceOrderPayload) Validate() []string {
