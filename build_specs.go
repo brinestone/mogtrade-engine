@@ -4,10 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 )
 
 func main() {
+	cmd := exec.Command("smithy", "build")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Fatal(err)
+	}
 	files, err := os.ReadDir("openapi")
 	p := "openapi"
 	if err != nil {
