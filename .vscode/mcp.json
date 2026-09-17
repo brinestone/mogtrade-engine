@@ -1,15 +1,13 @@
 {
     "servers": {
-        "mogtrade-engine-docs": {
-            "command": "go",
+        "mogtrade-dev-mcp": {
+            "command": "npx",
             "args": [
-                "run",
-                "mcp/main.go"
+                "tsx",
+                "mcp/src/index.ts"
             ],
             "cwd": ".",
-            "env": {
-                "CGO_ENABLED": "0"
-            }
+            "envFile": "app/cmd/.env"
         }
     }
 }
