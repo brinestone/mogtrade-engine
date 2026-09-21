@@ -8,6 +8,52 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type sellPriceList []decimal.Decimal
+
+func (l sellPriceList) Len() int           { return len(l) }
+func (l sellPriceList) Less(i, j int) bool { return l[i].LessThan(l[j]) }
+func (l sellPriceList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
+func (l *sellPriceList) Peek() decimal.NullDecimal {
+	if l.Len() == 0 {
+		return decimal.NullDecimal{}
+	}
+	return decimal.NewNullDecimal((*l)[0])
+}
+func (l *sellPriceList) Push(p any) {
+	pp, _ := p.(decimal.Decimal)
+	*l = append(*l, pp)
+}
+func (l *sellPriceList) Pop() any {
+	old := *l
+	n := len(old)
+	x := old[n-1]
+	*l = old[0 : n-1]
+	return x
+}
+
+type buyPriceList []decimal.Decimal
+
+func (l buyPriceList) Len() int           { return len(l) }
+func (l buyPriceList) Less(i, j int) bool { return l[i].GreaterThan(l[j]) }
+func (l buyPriceList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
+func (l *buyPriceList) Peek() decimal.NullDecimal {
+	if l.Len() == 0 {
+		return decimal.NullDecimal{}
+	}
+	return decimal.NewNullDecimal((*l)[0])
+}
+func (l *buyPriceList) Push(p any) {
+	pp, _ := p.(decimal.Decimal)
+	*l = append(*l, pp)
+}
+func (l *buyPriceList) Pop() any {
+	old := *l
+	n := len(old)
+	x := old[n-1]
+	*l = old[0 : n-1]
+	return x
+}
+
 type priceLevel struct {
 	TotalVolume decimal.Decimal
 	Orders      *list.List
@@ -26,111 +72,99 @@ type OrderEntry struct {
 }
 
 type OrderBook struct {
-	bidBook map[string]*priceLevel
-	askBook map[string]*priceLevel
-	bidKeys []string
-	askKeys []string
-	buyMu   sync.Mutex
-	sellMu  sync.Mutex
-	orders  *list.List
+	bids       map[string]*priceLevel
+	asks       map[string]*priceLevel
+	sellPrices *sellPriceList
+	bidPrices  *buyPriceList
+	buyMu      sync.Mutex
+	sellMu     sync.Mutex
+	orders     *list.List
 }
 
 func (o *OrderBook) AddOrder(p PlaceMatchOrderParams) {
 	var level *priceLevel
 	if p.Type == db.OrderSideSell {
-		level, found := o.askBook[p.Price.String()]
+		level, found := o.asks[p.Price.String()]
 		if !found {
 			o.sellMu.Lock()
 			level = &priceLevel{
 				Orders:      list.New(),
 				TotalVolume: decimal.Zero,
 			}
-			o.askBook[p.Price.String()] = level
+			o.asks[p.Price.String()] = level
 			o.sellMu.Unlock()
+			o.sellPrices.Push(p.Price)
 		}
-
 	} else {
-		level, found := o.bidBook[p.Price.String()]
+		level, found := o.bids[p.Price.String()]
 		if !found {
 			o.buyMu.Lock()
 			level = &priceLevel{
 				Orders:      list.New(),
 				TotalVolume: decimal.Zero,
 			}
-			o.bidBook[p.Price.String()] = level
+			o.bids[p.Price.String()] = level
 			o.buyMu.Unlock()
+			o.bidPrices.Push(p.Price)
 		}
 	}
 	level.TotalVolume.Add(p.Quantity)
-	level.Orders.PushFront(OrderEntry{
+	level.Orders.PushBack(OrderEntry{
 		OrderId:  p.OrderId,
 		Quantity: p.Quantity,
 	})
 }
 
 func (o *OrderBook) BestAsk() PriceLevel {
-	var min = decimal.NewFromFloat(99999999999999)
-	var e *priceLevel
-
-	for key, entry := range o.askBook {
-		price, _ := decimal.NewFromString(key)
-		if price.LessThan(min) {
-			min = price
-			e = entry
-		}
-	}
-
+	var bestAsk = o.sellPrices.Peek()
 	result := PriceLevel{}
 
-	if e != nil {
+	if bestAsk.Valid {
 		result.Valid = true
+		e := o.asks[bestAsk.Decimal.String()]
 		for n := e.Orders.Front(); n != nil; n = n.Next() {
 			entry, ok := n.Value.(OrderEntry)
 			if ok {
 				result.Orders = append(result.Orders, entry)
 			}
 		}
-		result.Price = min
+		result.Price = bestAsk.Decimal
 		result.TotalVolume = e.TotalVolume
 	}
 	return result
 }
 
 func (o *OrderBook) BestBid() PriceLevel {
-	var max = decimal.NewFromFloat(-99999999999999)
-	var e *priceLevel
-
-	for key, entry := range o.bidBook {
-		price, _ := decimal.NewFromString(key)
-		if price.GreaterThan(max) {
-			max = price
-			e = entry
-		}
-	}
-
+	var bestBid = o.bidPrices.Peek()
 	result := PriceLevel{}
 
-	if e != nil {
+	if bestBid.Valid {
 		result.Valid = true
+		e := o.bids[bestBid.Decimal.String()]
 		for n := e.Orders.Front(); n != nil; n = n.Next() {
 			entry, ok := n.Value.(OrderEntry)
 			if ok {
 				result.Orders = append(result.Orders, entry)
 			}
 		}
-		result.Price = max
+		result.Price = bestBid.Decimal
 		result.TotalVolume = e.TotalVolume
 	}
 	return result
 }
 
-func (o *OrderBook) findFills() {
+func (o *OrderBook) findMatches() {
+
 }
 
 func NewBook() *OrderBook {
+	sellPrices := new(make(sellPriceList, 0))
+	buyPrices := new(make(buyPriceList, 0))
 	return &OrderBook{
-		bidBook: make(map[string]*priceLevel),
-		askBook: make(map[string]*priceLevel),
-		orders:  list.New(),
+		bids:       make(map[string]*priceLevel),
+		asks:       make(map[string]*priceLevel),
+		orders:     list.New(),
+		sellPrices: sellPrices,
+		bidPrices:  buyPrices,
 	}
 }
