@@ -54,6 +54,48 @@ func (ns NullAccountProvider) Value() (driver.Value, error) {
 	return string(ns.AccountProvider), nil
 }
 
+type ExecutionStatus string
+
+const (
+	ExecutionStatusFailed ExecutionStatus = "failed"
+	ExecutionStatusFilled ExecutionStatus = "filled"
+)
+
+func (e *ExecutionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ExecutionStatus(s)
+	case string:
+		*e = ExecutionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ExecutionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullExecutionStatus struct {
+	ExecutionStatus ExecutionStatus
+	Valid           bool // Valid is true if ExecutionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullExecutionStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ExecutionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ExecutionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullExecutionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ExecutionStatus), nil
+}
+
 type OrderSide string
 
 const (
@@ -94,6 +136,53 @@ func (ns NullOrderSide) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.OrderSide), nil
+}
+
+type OrderStatus string
+
+const (
+	OrderStatusPending         OrderStatus = "pending"
+	OrderStatusSubmitted       OrderStatus = "submitted"
+	OrderStatusPartiallyFilled OrderStatus = "partially_filled"
+	OrderStatusFilled          OrderStatus = "filled"
+	OrderStatusCancelled       OrderStatus = "cancelled"
+	OrderStatusRejected        OrderStatus = "rejected"
+	OrderStatusExpired         OrderStatus = "expired"
+)
+
+func (e *OrderStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = OrderStatus(s)
+	case string:
+		*e = OrderStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for OrderStatus: %T", src)
+	}
+	return nil
+}
+
+type NullOrderStatus struct {
+	OrderStatus OrderStatus
+	Valid       bool // Valid is true if OrderStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullOrderStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.OrderStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.OrderStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullOrderStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.OrderStatus), nil
 }
 
 type OrderType string
@@ -240,6 +329,24 @@ type Account struct {
 	Password              *string
 	CreatedAt             pgtype.Timestamp
 	UpdatedAt             pgtype.Timestamp
+}
+
+type Order struct {
+	UserID           *string
+	Symbol           string
+	Side             OrderSide
+	OrderType        OrderType
+	Quantity         decimal.Decimal
+	LimitPrice       decimal.NullDecimal
+	StopPrice        decimal.NullDecimal
+	ID               string
+	ClientOrderID    *string
+	Status           *OrderStatus
+	FilledQuantity   decimal.NullDecimal
+	AverageFillPrice decimal.NullDecimal
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	TracingID        string
 }
 
 type User struct {

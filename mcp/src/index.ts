@@ -85,6 +85,20 @@ async function applyMigrations(connString: string, dir: string, signal: AbortSig
     })
 }
 
+async function generateQueries(signal: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        const proc = spawn('sqlc', ['generate'], { signal });
+        proc.on('error', reject);
+        proc.on('exit', (code, signal) => {
+            if (code !== 0) {
+                reject(new Error('Process ended with exit code: ' + code + ', ' + signal));
+                return
+            }
+            resolve();
+        });
+    })
+}
+
 const server = new McpServer({
     name: 'mogtade',
     version: '1.0.0',

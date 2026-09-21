@@ -4,7 +4,11 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	sgin "github.com/getsentry/sentry-go/gin"
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
@@ -79,4 +83,16 @@ func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+	dsn := os.Getenv("SENTRY_DSN")
+	if len(dsn) > 0 {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:         dsn,
+			Environment: "development",
+
+			Debug: true,
+		}); err != nil {
+			panic(err)
+		}
+		e.Use(sgin.New(sgin.Options{}))
+	}
 }

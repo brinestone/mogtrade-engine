@@ -37,7 +37,132 @@ func (q *Queries) ApplyOrderFill(ctx context.Context, arg ApplyOrderFillParams) 
 	return err
 }
 
-const placeOrder = `-- name: PlaceOrder :one
+const createExecution = `-- name: CreateExecution :exec
+insert into
+    executions (
+        id,
+        "order",
+        price,
+        quantity,
+        order_side,
+        order_status,
+        "order_type",
+        symbol,
+        "user",
+        fee_currency,
+        fee_rate,
+        fee_amount,
+        tracing_id,
+        exec_status
+    )
+values
+    (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14
+    )
+`
+
+type CreateExecutionParams struct {
+	ID          string
+	Order       string
+	Price       decimal.Decimal
+	Quantity    decimal.Decimal
+	OrderSide   OrderSide
+	OrderStatus OrderStatus
+	OrderType   OrderType
+	Symbol      string
+	User        *string
+	FeeCurrency string
+	FeeRate     decimal.Decimal
+	FeeAmount   decimal.Decimal
+	TracingID   string
+	ExecStatus  ExecutionStatus
+}
+
+func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams) error {
+	_, err := q.db.Exec(ctx, createExecution,
+		arg.ID,
+		arg.Order,
+		arg.Price,
+		arg.Quantity,
+		arg.OrderSide,
+		arg.OrderStatus,
+		arg.OrderType,
+		arg.Symbol,
+		arg.User,
+		arg.FeeCurrency,
+		arg.FeeRate,
+		arg.FeeAmount,
+		arg.TracingID,
+		arg.ExecStatus,
+	)
+	return err
+}
+
+const findOrderById = `-- name: FindOrderById :one
+select
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, filled_quantity, average_fill_price, created_at, updated_at, tracing_id
+from
+    orders
+where
+    id = $1
+`
+
+func (q *Queries) FindOrderById(ctx context.Context, id string) (Order, error) {
+	row := q.db.QueryRow(ctx, findOrderById, id)
+	var i Order
+	err := row.Scan(
+		&i.UserID,
+		&i.Symbol,
+		&i.Side,
+		&i.OrderType,
+		&i.Quantity,
+		&i.LimitPrice,
+		&i.StopPrice,
+		&i.ID,
+		&i.ClientOrderID,
+		&i.Status,
+		&i.FilledQuantity,
+		&i.AverageFillPrice,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TracingID,
+	)
+	return i, err
+}
+
+const orderExistsById = `-- name: OrderExistsById :one
+select
+    exists (
+        select
+            1
+        from
+            orders
+        where
+            id = $1
+    )
+`
+
+func (q *Queries) OrderExistsById(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, orderExistsById, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const placeOrder = `-- name: PlaceOrder :exec
 INSERT INTO
     orders (
         id,
@@ -53,8 +178,6 @@ INSERT INTO
     )
 VALUES
     ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING
-    id
 `
 
 type PlaceOrderParams struct {
@@ -70,8 +193,8 @@ type PlaceOrderParams struct {
 	AverageFillPrice decimal.NullDecimal
 }
 
-func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) (string, error) {
-	row := q.db.QueryRow(ctx, placeOrder,
+func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) error {
+	_, err := q.db.Exec(ctx, placeOrder,
 		arg.ID,
 		arg.UserID,
 		arg.Symbol,
@@ -83,7 +206,5 @@ func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) (string,
 		arg.ClientOrderID,
 		arg.AverageFillPrice,
 	)
-	var id string
-	err := row.Scan(&id)
-	return id, err
+	return err
 }
