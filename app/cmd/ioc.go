@@ -21,6 +21,7 @@ import (
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/jobs"
 	"github.com/brinestone/mogtrade/services/market"
+	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/adapter"
 	"github.com/brinestone/mogtrade/web/api"
@@ -45,6 +46,9 @@ func setupServices() error {
 		return err
 	}
 	if err := ioc.Factory(orders.NewRiskEngine, true); err != nil {
+		return err
+	}
+	if err := ioc.Factory(matching.NewMatchingEngine, true); err != nil {
 		return err
 	}
 	return nil

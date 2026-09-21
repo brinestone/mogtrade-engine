@@ -1,0 +1,1 @@
+alter table executions drop column updated_at;
