@@ -21,6 +21,7 @@ import (
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/infra/mail"
+	"github.com/brinestone/mogtrade/infra/sources"
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/jobs"
 	"github.com/brinestone/mogtrade/services/market"
@@ -93,6 +94,11 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters(ctx context.Context) error {
+	ioc.Factory(func() *sources.MassiveMarketInfoProvider {
+		return sources.NewMassiveMarketInfoProvider(os.Getenv("MASSIVE_API_KEY"))
+	}, true)
+	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.TickerInfoProvider { return m })
+	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.ExchangeInfoProvider { return m })
 	err := ioc.Factory(func() (mail.Mailer, error) {
 		sender := os.Getenv("MAILTRAP_API_KEY")
 		senderName := "MogTrade"

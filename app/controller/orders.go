@@ -93,17 +93,22 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 
 	orderId := o.idGenerator()
 	tracingId := o.idGenerator()
+	systemWalletId := helpers.GetSystemWalletByType(wallet.WalletType)
 	err = orders.CreateOrder(ctx.Request.Context(), q, orders.PlaceOrderParams{
-		TracingId:        tracingId,
-		OrderId:          orderId,
-		IdempotencyToken: payload.IdempotencyToken,
-		PlacedBy:         helpers.GetCurrentUserId(ctx),
-		Symbol:           payload.Symbol,
-		Side:             db.OrderSide(payload.Side),
-		Type:             db.OrderType(payload.Type),
-		Quantity:         decimal.NewFromFloat32(payload.Quantity),
-		LimitPrice:       payload.LimitPrice,
-		StopPrice:        payload.StopPrice,
+		TracingId:           tracingId,
+		OrderId:             orderId,
+		WalletId:            wallet.WalletID,
+		WalletTransactionId: o.idGenerator(),
+		SystemWalletId:      systemWalletId,
+		IdempotencyToken:    payload.IdempotencyToken,
+		PlacedBy:            helpers.GetCurrentUserId(ctx),
+
+		Symbol:     payload.Symbol,
+		Side:       db.OrderSide(payload.Side),
+		Type:       db.OrderType(payload.Type),
+		Quantity:   decimal.NewFromFloat32(payload.Quantity),
+		LimitPrice: payload.LimitPrice,
+		StopPrice:  payload.StopPrice,
 	})
 	if err != nil {
 		if errors.Is(err, orders.ErrDuplicateOrder) {

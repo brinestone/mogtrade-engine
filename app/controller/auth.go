@@ -52,7 +52,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 	}
 
 	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te auth.TokenEncoder, idg contract.IdGeneratorFunc) (auth.SignInResult, error) {
-		a.logger.Debug("validation successful, signing in user", "identifier", request.Username, "type", "credential")
+		a.logger.Debug("validation successful, signing in user", "email", request.Username, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
 			a.logger.Error("unable to open transaction, aborting")
@@ -74,11 +74,11 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, auth.ErrInavlidCredentials) || errors.Is(err, auth.ErrNoAuthAccountFound) {
-			a.logger.Warn("sign in failed, aborting", "identifier", request.Username, "type", "credential", "err", err.Error())
+			a.logger.Warn("sign in failed, aborting", "email", request.Username, "type", "credential", "err", err.Error())
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 			return
 		}
-		a.logger.Error("sign in failed, aborting", "err", err.Error(), "identifier", request.Username)
+		a.logger.Error("sign in failed, aborting", "err", err.Error(), "email", request.Username)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
 		return
 	}
@@ -101,7 +101,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 		return
 	}
 	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc) (auth.SignUpResult, error) {
-		a.logger.Debug("validation successful, creating user", "identifier", request.Email, "type", "credential")
+		a.logger.Debug("validation successful, creating user", "email", request.Email, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
 			a.logger.Error("unable to open transaction", "err", err.Error())
@@ -123,11 +123,11 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, auth.ErrAccountAlreadyExists) {
-			a.logger.Warn("account already exists", "identifier", request.Email, "type", "credential")
+			a.logger.Warn("account already exists", "email", request.Email, "type", "credential")
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
-		a.logger.Error("user creation failed, aborting", "err", err.Error(), "identifier", request.Email)
+		a.logger.Error("user creation failed, aborting", "err", err.Error(), "email", request.Email)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
 		return
 	}
