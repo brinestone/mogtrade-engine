@@ -1,3 +1,15 @@
+-- name: GetOrders :many
+select
+    *
+from
+    orders
+where
+    id > $1
+order by
+    id
+limit
+    $2;
+
 -- name: FindOrderById :one
 select
     *

@@ -16,7 +16,6 @@ type PlaceOrderParams struct {
 	IdempotencyToken string
 	PlacedBy         string
 	Symbol           string
-	ExecutionId      string
 	Side             db.OrderSide
 	Type             db.OrderType
 	Quantity         decimal.Decimal

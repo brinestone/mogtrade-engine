@@ -12,6 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryslog "github.com/getsentry/sentry-go/slog"
+
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/core/feed"
 	"github.com/brinestone/mogtrade/infra"
@@ -31,6 +34,7 @@ import (
 )
 
 func setupServices() error {
+	ioc.Factory(matching.NewMatchingEngine, true)
 	if err := ioc.Factory(func() *market.ExchangeHub {
 		return market.NewExchangeHub()
 	}, true); err != nil {
@@ -185,6 +189,10 @@ func setupLogging(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		sentryHandler := sentryslog.Option{
+			LogLevel:  []slog.Level{slog.LevelInfo, slog.LevelWarn, slog.LevelError},
+			AddSource: true,
+		}.NewSentryHandler(ctx)
 		// Clean up all hooks at once when context drops
 		go func() {
 			defer accessHandle.Close()
@@ -201,6 +209,7 @@ func setupLogging(ctx context.Context) error {
 			slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
 			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
 			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
+			sentryHandler,
 			// slog.NewJSONHandler(errHandler, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
 		))
 	}
@@ -216,6 +225,7 @@ func setupLogging(ctx context.Context) error {
 	return nil
 }
 func bootstrapApplication(ctx context.Context) {
+	initializeSentry()
 	// 1. Set up logging first and let it inject dependencies
 	if err := setupLogging(ctx); err != nil {
 		panic(err)
@@ -257,4 +267,16 @@ func startAsyncTasks(ctx context.Context) {
 	performSeeding(ctx, *pool, *l, *idg)
 	startJobScheduler(ctx)
 	go pullMarketFeed(ctx)
+}
+
+func initializeSentry() {
+	dsn := os.Getenv("SENTRY_DSN")
+	if len(dsn) > 0 {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:           dsn,
+			EnableTracing: true,
+		}); err != nil {
+			panic(err)
+		}
+	}
 }
