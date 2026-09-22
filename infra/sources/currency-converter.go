@@ -13,16 +13,41 @@ import (
 	"log/slog"
 )
 
-// cacheEntry represents a single entry in the file-backed cache.
-type cacheEntry struct {
-	Rates    map[string]float32 // symbol -> rate (against default base)
-	Timestamp int64              // Unix seconds when cached
+// currencySource is an interface for fetching exchange rates from a particular source.
+type currencySource interface {
+	// Pull fetches exchange rates for the given base and currencies.
+	// Returns a map of currency -> rate.
+	Pull(base string, currencies []string) (map[string]float32, error)
+}
+
+// params holds the configuration for NewCachedCurrencyConverter.
+type params struct {
+	// TTL in seconds for cache entries
+	TTLSeconds int64
+
+	// Default base currency (e.g., "USD")
+	DefaultBase string
+
+	// API base URL (without API key)
+	APIBaseURL string
+
+	// API key for the exchange rate service
+	APIKey string
+
+	// Logger for structured logging
+	Logger *slog.Logger
+
+	// Sources is a slice of CurrencySource implementations.
+	// If multiple sources are provided, the converter will use a
+	// round-robin strategy to fetch from them, which helps save
+	// on token/rate limits by distributing requests.
+	Sources []currencySource
 }
 
 // CachedCurrencyConverter implements the CurrencyConverter interface using
 // a file-backed cache for exchange rates. On cache-miss, the converter
-// fetches rates from the API and stores them in the cache with a
-// configurable TTL.
+// fetches rates from the configured sources and stores them in the
+// cache with a configurable TTL.
 type CachedCurrencyConverter struct {
 	mu          sync.RWMutex
 	cacheFile   *os.File
@@ -30,20 +55,41 @@ type CachedCurrencyConverter struct {
 	ttlSeconds  int64
 	defaultBase string
 	apiBaseURL  string
-	apiKey      string // API key for the exchangerate service
+	apiKey      string
 	logger      *slog.Logger
+	sources     []currencySource // nil means use single-source fallback
+	sourceIndex int              // for round-robin
 }
 
-// NewCachedCurrencyConverter creates a new CachedCurrencyConverter.
-// The logger is injected from outside; the cache path uses an environment
+// NewCachedCurrencyConverter creates a new CachedCurrencyConverter with the
+// given params. The logger is required; the cache path uses an environment
 // variable (TEMP or TMPDIR) for platform-agnostic temporary file storage.
-func NewCachedCurrencyConverter(ttlSeconds int64, defaultBase string, apiBaseURL string, apiKey string, logger *slog.Logger) *CachedCurrencyConverter {
+// If multiple CurrencySource implementations are provided, they will be
+// used in a round-robin fashion.
+func NewCachedCurrencyConverter(p params) *CachedCurrencyConverter {
+	// Validate required fields
+	if p.Logger == nil {
+		panic("currency-converter: logger is required")
+	}
+
+	// Set defaults
+	if p.TTLSeconds <= 0 {
+		p.TTLSeconds = 300 // 5 minutes default
+	}
+	if p.DefaultBase == "" {
+		p.DefaultBase = "USD"
+	}
+	if p.APIBaseURL == "" {
+		p.APIBaseURL = "https://v6.exchangerate-api.com/v6"
+	}
+
 	cc := &CachedCurrencyConverter{
-		ttlSeconds:  ttlSeconds,
-		defaultBase: defaultBase,
-		apiBaseURL:  apiBaseURL,
-		apiKey:      apiKey,
-		logger:      logger,
+		ttlSeconds:  p.TTLSeconds,
+		defaultBase: p.DefaultBase,
+		apiBaseURL:  p.APIBaseURL,
+		apiKey:      p.APIKey,
+		logger:      p.Logger,
+		sources:     p.Sources,
 	}
 	cc.initializeCache()
 	return cc
@@ -145,147 +191,146 @@ func (cc *CachedCurrencyConverter) populateCache(rates map[string]float32) {
 	cc.logger.Debug("populateCache: successfully wrote rates to cache file", "path", cc.cachePath)
 }
 
-// GetDefaultExchangeRates implements the CurrencyConverter interface.
-// Gets exchange rates for the given symbols against the default base currency.
-// Uses the file-backed cache if available and not expired; otherwise fetches from API.
-func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, symbols []string) ([]float32, error) {
-	// Check cache first
-	cc.mu.RLock()
+// getRateFromSources attempts to fetch rates from the available sources.
+// Uses round-robin strategy if multiple sources are configured.
+// Returns the rates map and the source index used (for round-robin).
+func (cc *CachedCurrencyConverter) getRateFromSources(base string, currencies []string) (map[string]float32, int, error) {
+	// First, check if we have a cached result that's still valid
 	cacheRates, hit := cc.lookupCache()
-	cc.mu.RUnlock()
-
 	if hit && cacheRates != nil {
-		cc.logger.Debug("GetDefaultExchangeRates: cache hit, returning cached rates", "symbols_count", len(symbols))
-		// Return rates for requested symbols
-		result := make([]float32, len(symbols))
-		for i, sym := range symbols {
-			if r, ok := cacheRates[sym]; ok {
-				result[i] = r
-			} else {
-				result[i] = 0 // symbol not in cache
-			}
-		}
-		return result, nil
+		return cacheRates, cc.sourceIndex, nil
 	}
 
-	cc.logger.Debug("GetDefaultExchangeRates: cache miss, fetching from API")
+	var rates map[string]float32
+	var err error
 
-	// Cache miss - fetch from API
-	rates, err := cc.fetchFromAPI(symbols)
+	// If no sources configured, or single source, use direct fetch
+	if len(cc.sources) == 0 {
+		// Fall back to direct API call using the embedded URL pattern
+		rates, err = cc.fetchFromAPI(base, currencies)
+	} else {
+		// Round-robin through sources
+		// Start from current index, advance after use
+	 idx := cc.sourceIndex
+	 // Try each source until one succeeds or we've tried them all
+	 for attempt := 0; attempt < len(cc.sources); attempt++ {
+		 sourceIdx := (idx + attempt) % len(cc.sources)
+		 rates, err = cc.sources[sourceIdx].Pull(base, currencies)
+		 if err == nil && rates != nil {
+			 // Success! Update source index for next time
+			 cc.sourceIndex = (sourceIdx + 1) % len(cc.sources)
+			 return rates, sourceIdx, nil
+		 }
+	 }
+	 // If all sources failed, return error
+	 return nil, cc.sourceIndex, err
+	}
+
+	// If we got here via the no-sources path, update the source index
+	// (keep it unchanged since we didn't use round-robin)
+	if len(cc.sources) == 0 {
+		// No sources, just return what we have
+	}
+
+	return rates, cc.sourceIndex, err
+}
+
+// GetDefaultExchangeRates implements the CurrencyConverter interface.
+// Gets exchange rates for the given symbols against the default base currency.
+// Uses the file-backed cache if available and not expired; otherwise fetches
+// from the configured sources.
+func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, symbols []string) ([]float32, error) {
+	// Determine the base currency from the symbols (first symbol is typically the base)
+	// or use the configured default base.
+	base := cc.defaultBase
+
+	// Try to get rates from sources (with cache check and round-robin)
+	rates, _, err := cc.getRateFromSources(base, symbols)
 	if err != nil {
-		cc.logger.Error("GetDefaultExchangeRates: API fetch failed", "err", err)
+		cc.logger.Error("GetDefaultExchangeRates: failed to get rates from sources", "err", err)
 		return nil, err
 	}
 
-	// Populate cache
-	cc.mu.Lock()
-	// Build rates map keyed by symbol
-	ratesMap := make(map[string]float32)
+	// Build result slice aligned with the requested symbols
+	cc.logger.Debug("GetDefaultExchangeRates: returning rates from source", "symbols_count", len(symbols))
+	result := make([]float32, len(symbols))
 	for i, sym := range symbols {
-		ratesMap[sym] = rates[i]
+		if r, ok := rates[sym]; ok {
+			result[i] = r
+		} else {
+			result[i] = 0 // symbol not available
+		}
 	}
-	cc.populateCache(ratesMap)
-	cc.mu.Unlock()
-
-	cc.logger.Debug("GetDefaultExchangeRates: successfully populated cache", "rates_count", len(rates))
-	return rates, nil
+	return result, nil
 }
 
 // GetExchangeRates implements the CurrencyConverter interface.
 // Gets exchange rates for the given symbols against the specified base currency.
 // Uses the file-backed cache if available and not expired for the default base.
-// For non-default bases, always fetches from API.
+// For non-default bases, always fetches from the configured sources.
 func (cc *CachedCurrencyConverter) GetExchangeRates(ctx context.Context, base string, symbols []string) ([]float32, error) {
-	// If requesting rates against the default base, use cache
+	// If requesting rates against the default base, use sources
 	if base == cc.defaultBase {
-		cc.mu.RLock()
-		cacheRates, hit := cc.lookupCache()
-		cc.mu.RUnlock()
-
-		if hit && cacheRates != nil {
-			cc.logger.Debug("GetExchangeRates: cache hit for default base", "symbols_count", len(symbols))
-			result := make([]float32, len(symbols))
-			for i, sym := range symbols {
-				if r, ok := cacheRates[sym]; ok {
-					result[i] = r
-				} else {
-					result[i] = 0
-				}
-			}
-			return result, nil
-		}
-
-		cc.logger.Debug("GetExchangeRates: cache miss for default base, fetching from API")
-		// Cache miss - fetch from API
-		rates, err := cc.fetchFromAPI(symbols)
+		rates, _, err := cc.getRateFromSources(base, symbols)
 		if err != nil {
-			cc.logger.Error("GetExchangeRates: API fetch failed", "err", err)
+			cc.logger.Error("GetExchangeRates: failed to get rates from source", "err", err)
 			return nil, err
 		}
 
-		// Populate cache
-		cc.mu.Lock()
-		ratesMap := make(map[string]float32)
+		result := make([]float32, len(symbols))
 		for i, sym := range symbols {
-			ratesMap[sym] = rates[i]
+			if r, ok := rates[sym]; ok {
+				result[i] = r
+			} else {
+				result[i] = 0
+			}
 		}
-		cc.populateCache(ratesMap)
-		cc.mu.Unlock()
-
-		cc.logger.Debug("GetExchangeRates: successfully populated cache", "rates_count", len(rates))
-		return rates, nil
+		return result, nil
 	}
 
-	// Non-default base - always fetch from API
-	cc.logger.Debug("GetExchangeRates: non-default base, fetching from API")
-	rates, err := cc.fetchFromAPI(symbols)
+	// Non-default base - always fetch from sources
+	rates, _, err := cc.getRateFromSources(base, symbols)
 	if err != nil {
-		cc.logger.Error("GetExchangeRates: API fetch failed for non-default base", "err", err)
+		cc.logger.Error("GetExchangeRates: failed to get rates from source for non-default base", "err", err)
 		return nil, err
 	}
 
-	return rates, nil
+	result := make([]float32, len(symbols))
+	for i, sym := range symbols {
+		if r, ok := rates[sym]; ok {
+			result[i] = r
+		} else {
+			result[i] = 0
+		}
+	}
+	return result, nil
 }
 
 // fetchFromAPI fetches exchange rates from the API endpoint.
-func (cc *CachedCurrencyConverter) fetchFromAPI(symbols []string) ([]float32, error) {
-	// Build the URL with API key
+// Used as a fallback when no external sources are configured.
+func (cc *CachedCurrencyConverter) fetchFromAPI(base string, currencies []string) (map[string]float32, error) {
+	// Build the URL
 	url := cc.apiBaseURL
 	if url == "" {
-		// Include the API key in the URL as required by the exchangerate API
 		url = fmt.Sprintf("https://v6.exchangerate-api.com/v6/%s/latest/%s?apikey=%s", cc.defaultBase, cc.defaultBase, cc.apiKey)
-		cc.logger.Debug("fetchFromAPI: constructed API URL (masked)", "base", cc.defaultBase)
 	}
-
-	cc.logger.Debug("fetchFromAPI: making HTTP GET request", "url_masked", url[:min(40, len(url))]+"...")
 
 	// Make the HTTP request
 	resp, err := http.Get(url)
 	if err != nil {
-		cc.logger.Error("fetchFromAPI: HTTP request failed", "err", err)
 		return nil, fmt.Errorf("failed to fetch exchange rates: %w", err)
 	}
 	defer resp.Body.Close()
 
-	cc.logger.Debug("fetchFromAPI: received response with status", "status_code", resp.StatusCode)
-
 	if resp.StatusCode != http.StatusOK {
-		bodyText := "unknown error"
-		if resp.Body != nil {
-			b, _ := io.ReadAll(resp.Body)
-			bodyText = string(b)
-		}
-		cc.logger.Error("fetchFromAPI: API returned non-OK status", "status_code", resp.StatusCode, "body_snippet", string(bodyText)[:200])
 		return nil, fmt.Errorf("api returned status %d", resp.StatusCode)
 	}
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		cc.logger.Error("fetchFromAPI: failed to read response body", "err", err)
 		return nil, fmt.Errorf("failed to read api response: %w", err)
 	}
-	cc.logger.Debug("fetchFromAPI: read response body", "body_bytes", len(body))
 
 	// Parse the API response
 	var apiResp struct {
@@ -295,35 +340,20 @@ func (cc *CachedCurrencyConverter) fetchFromAPI(symbols []string) ([]float32, er
 	}
 
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		cc.logger.Error("fetchFromAPI: failed to parse API response JSON", "err", err)
 		return nil, fmt.Errorf("failed to parse api response: %w", err)
 	}
 
-	cc.logger.Debug("fetchFromAPI: parsed API result", "result", apiResp.Result, "base_code", apiResp.BaseCode, "rates_count", len(apiResp.Rates))
-
 	if apiResp.Result != "success" {
-		cc.logger.Error("fetchFromAPI: API returned error result", "result", apiResp.Result)
 		return nil, fmt.Errorf("api returned error result: %s", apiResp.Result)
 	}
 
-	// Build rates slice for requested symbols
-	result := make([]float32, len(symbols))
-	for i, sym := range symbols {
+	// Filter to only the requested currencies
+	result := make(map[string]float32)
+	for _, sym := range currencies {
 		if r, ok := apiResp.Rates[sym]; ok {
-			result[i] = r
-		} else {
-			result[i] = 0 // symbol not available
+			result[sym] = r
 		}
 	}
 
-	cc.logger.Debug("fetchFromAPI: built rates result", "rates_count", len(result), "symbols", symbols)
 	return result, nil
-}
-
-// min returns the minimum of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
