@@ -7,9 +7,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
-	"log"
+	"log/slog"
 )
 
 // cacheEntry represents a single entry in the file-backed cache.
@@ -30,41 +31,56 @@ type CachedCurrencyConverter struct {
 	defaultBase string
 	apiBaseURL  string
 	apiKey      string // API key for the exchangerate service
-	logger      *log.Logger
+	logger      *slog.Logger
 }
 
 // NewCachedCurrencyConverter creates a new CachedCurrencyConverter.
-func NewCachedCurrencyConverter(ttlSeconds int64, defaultBase string, apiBaseURL string, apiKey string) *CachedCurrencyConverter {
+// The logger is injected from outside; the cache path uses an environment
+// variable (TEMP or TMPDIR) for platform-agnostic temporary file storage.
+func NewCachedCurrencyConverter(ttlSeconds int64, defaultBase string, apiBaseURL string, apiKey string, logger *slog.Logger) *CachedCurrencyConverter {
 	cc := &CachedCurrencyConverter{
 		ttlSeconds:  ttlSeconds,
 		defaultBase: defaultBase,
 		apiBaseURL:  apiBaseURL,
 		apiKey:      apiKey,
-		logger:      log.New(os.Stderr, "[currency-converter] ", log.LstdFlags),
+		logger:      logger,
 	}
 	cc.initializeCache()
 	return cc
 }
 
-// initializeCache opens/creates the cache file.
+// initializeCache opens/creates the cache file using a platform-agnostic temp directory.
 func (cc *CachedCurrencyConverter) initializeCache() {
-	var err error
-
-	// Create cache file in temp directory, or use a fixed path
-	cc.cachePath = "/tmp/mogtrade-currency-cache.json"
-
-	// Ensure directory exists
-	if err := os.MkdirAll("/tmp", 0755); err != nil {
-		// fallback to current directory
-		cc.cachePath = "currency-cache.json"
+	// Determine temp directory from environment variable, platform-agnostic
+	tempDir := os.Getenv("TEMP")
+	if tempDir == "" {
+		// Try TMPDIR (macOS/Linux)
+		tempDir = os.Getenv("TMPDIR")
+	}
+	if tempDir == "" {
+		// Fallback to /tmp
+		tempDir = "/tmp"
 	}
 
+	// Ensure the temp directory exists
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		cc.logger.Error("failed to create temp directory", "dir", tempDir, "err", err)
+		tempDir = "/tmp"
+	}
+
+	// Construct cache file path
+	cc.cachePath = filepath.Join(tempDir, "mogtrade-currency-cache.json")
+
 	// Create/truncate the cache file
+	var err error
 	cc.cacheFile, err = os.Create(cc.cachePath)
 	if err != nil {
-		// fallback
+		cc.logger.Error("failed to create cache file", "path", cc.cachePath, "err", err)
+		// Fallback: try current directory
+		cc.cachePath = "currency-cache.json"
 		cc.cacheFile, err = os.Create(cc.cachePath)
 		if err != nil {
+			cc.logger.Error("failed to create fallback cache file", "path", cc.cachePath, "err", err)
 			cc.cacheFile = nil
 		}
 	}
@@ -73,6 +89,7 @@ func (cc *CachedCurrencyConverter) initializeCache() {
 // closeCache closes the cache file.
 func (cc *CachedCurrencyConverter) closeCache() {
 	if cc.cacheFile != nil {
+		cc.logger.Debug("closing cache file", "path", cc.cachePath)
 		cc.cacheFile.Close()
 	}
 }
@@ -81,34 +98,34 @@ func (cc *CachedCurrencyConverter) closeCache() {
 // Returns the rates map and whether the cache entry is valid (not expired).
 func (cc *CachedCurrencyConverter) lookupCache() (map[string]float32, bool) {
 	if cc.cacheFile == nil {
-		cc.logger.Println("lookupCache: cache file not available, returning cache miss")
+		cc.logger.Debug("lookupCache: cache file not available, returning cache miss")
 		return nil, false
 	}
 
 	data, err := os.ReadFile(cc.cachePath)
 	if err != nil {
-		cc.logger.Printf("lookupCache: failed to read cache file: %v, returning cache miss", err)
+		cc.logger.Debug("lookupCache: failed to read cache file", "path", cc.cachePath, "err", err)
 		return nil, false
 	}
 
 	var rates map[string]float32
 	if err := json.Unmarshal(data, &rates); err != nil {
-		cc.logger.Printf("lookupCache: failed to unmarshal cache JSON: %v, returning cache miss", err)
+		cc.logger.Debug("lookupCache: failed to unmarshal cache JSON", "err", err)
 		return nil, false
 	}
 
 	// Check TTL: verify the cache was written recently
 	now := time.Now().Unix()
-	fileInfo, _ := cc.cacheFile.Stat()
+	fileInfo, _ := os.Stat(cc.cachePath)
 	fileModTime := fileInfo.ModTime().Unix()
 
 	// If cache file was modified within TTL, consider it valid
 	if now-fileModTime <= cc.ttlSeconds && len(rates) > 0 {
-		cc.logger.Printf("lookupCache: cache hit (TTL: %d seconds remaining, %d rates)", now-fileModTime, len(rates))
+		cc.logger.Debug("lookupCache: cache hit", "ttl_seconds_remaining", cc.ttlSeconds-(now-fileModTime), "rates_count", len(rates))
 		return rates, true
 	}
 
-	cc.logger.Printf("lookupCache: cache miss (expired or empty, TTL check: %d seconds old)", now-fileModTime)
+	cc.logger.Debug("lookupCache: cache miss", "ttl_seconds_old", now-fileModTime, "rates_count", len(rates))
 	return nil, false
 }
 
@@ -116,16 +133,16 @@ func (cc *CachedCurrencyConverter) lookupCache() (map[string]float32, bool) {
 func (cc *CachedCurrencyConverter) populateCache(rates map[string]float32) {
 	data, err := json.Marshal(rates)
 	if err != nil {
-		cc.logger.Printf("populateCache: failed to marshal rates to JSON: %v", err)
+		cc.logger.Error("populateCache: failed to marshal rates to JSON", "err", err)
 		return
 	}
 
 	// Write to cache file
 	if err := os.WriteFile(cc.cachePath, data, 0644); err != nil {
-		cc.logger.Printf("populateCache: failed to write cache file: %v", err)
+		cc.logger.Error("populateCache: failed to write cache file", "path", cc.cachePath, "err", err)
 		return
 	}
-	cc.logger.Println("populateCache: successfully wrote rates to cache file")
+	cc.logger.Debug("populateCache: successfully wrote rates to cache file", "path", cc.cachePath)
 }
 
 // GetDefaultExchangeRates implements the CurrencyConverter interface.
@@ -138,7 +155,7 @@ func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, 
 	cc.mu.RUnlock()
 
 	if hit && cacheRates != nil {
-		cc.logger.Println("GetDefaultExchangeRates: cache hit, returning cached rates")
+		cc.logger.Debug("GetDefaultExchangeRates: cache hit, returning cached rates", "symbols_count", len(symbols))
 		// Return rates for requested symbols
 		result := make([]float32, len(symbols))
 		for i, sym := range symbols {
@@ -151,12 +168,12 @@ func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, 
 		return result, nil
 	}
 
-	cc.logger.Println("GetDefaultExchangeRates: cache miss, fetching from API")
+	cc.logger.Debug("GetDefaultExchangeRates: cache miss, fetching from API")
 
 	// Cache miss - fetch from API
 	rates, err := cc.fetchFromAPI(symbols)
 	if err != nil {
-		cc.logger.Printf("GetDefaultExchangeRates: API fetch failed: %v", err)
+		cc.logger.Error("GetDefaultExchangeRates: API fetch failed", "err", err)
 		return nil, err
 	}
 
@@ -170,7 +187,7 @@ func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, 
 	cc.populateCache(ratesMap)
 	cc.mu.Unlock()
 
-	cc.logger.Println("GetDefaultExchangeRates: successfully populated cache")
+	cc.logger.Debug("GetDefaultExchangeRates: successfully populated cache", "rates_count", len(rates))
 	return rates, nil
 }
 
@@ -186,7 +203,7 @@ func (cc *CachedCurrencyConverter) GetExchangeRates(ctx context.Context, base st
 		cc.mu.RUnlock()
 
 		if hit && cacheRates != nil {
-			cc.logger.Println("GetExchangeRates: cache hit for default base")
+			cc.logger.Debug("GetExchangeRates: cache hit for default base", "symbols_count", len(symbols))
 			result := make([]float32, len(symbols))
 			for i, sym := range symbols {
 				if r, ok := cacheRates[sym]; ok {
@@ -198,11 +215,11 @@ func (cc *CachedCurrencyConverter) GetExchangeRates(ctx context.Context, base st
 			return result, nil
 		}
 
-		cc.logger.Println("GetExchangeRates: cache miss for default base, fetching from API")
+		cc.logger.Debug("GetExchangeRates: cache miss for default base, fetching from API")
 		// Cache miss - fetch from API
 		rates, err := cc.fetchFromAPI(symbols)
 		if err != nil {
-			cc.logger.Printf("GetExchangeRates: API fetch failed: %v", err)
+			cc.logger.Error("GetExchangeRates: API fetch failed", "err", err)
 			return nil, err
 		}
 
@@ -215,15 +232,15 @@ func (cc *CachedCurrencyConverter) GetExchangeRates(ctx context.Context, base st
 		cc.populateCache(ratesMap)
 		cc.mu.Unlock()
 
-		cc.logger.Println("GetExchangeRates: successfully populated cache")
+		cc.logger.Debug("GetExchangeRates: successfully populated cache", "rates_count", len(rates))
 		return rates, nil
 	}
 
 	// Non-default base - always fetch from API
-	cc.logger.Println("GetExchangeRates: non-default base, fetching from API")
+	cc.logger.Debug("GetExchangeRates: non-default base, fetching from API")
 	rates, err := cc.fetchFromAPI(symbols)
 	if err != nil {
-		cc.logger.Printf("GetExchangeRates: API fetch failed for non-default base: %v", err)
+		cc.logger.Error("GetExchangeRates: API fetch failed for non-default base", "err", err)
 		return nil, err
 	}
 
@@ -237,20 +254,20 @@ func (cc *CachedCurrencyConverter) fetchFromAPI(symbols []string) ([]float32, er
 	if url == "" {
 		// Include the API key in the URL as required by the exchangerate API
 		url = fmt.Sprintf("https://v6.exchangerate-api.com/v6/%s/latest/%s?apikey=%s", cc.defaultBase, cc.defaultBase, cc.apiKey)
-		cc.logger.Printf("fetchFromAPI: constructed API URL (masked): %s...%s", url[:40], url[len(url)-20:])
+		cc.logger.Debug("fetchFromAPI: constructed API URL (masked)", "base", cc.defaultBase)
 	}
 
-	cc.logger.Printf("fetchFromAPI: making HTTP GET request to %s", url)
+	cc.logger.Debug("fetchFromAPI: making HTTP GET request", "url_masked", url[:min(40, len(url))]+"...")
 
 	// Make the HTTP request
 	resp, err := http.Get(url)
 	if err != nil {
-		cc.logger.Printf("fetchFromAPI: HTTP request failed: %v", err)
+		cc.logger.Error("fetchFromAPI: HTTP request failed", "err", err)
 		return nil, fmt.Errorf("failed to fetch exchange rates: %w", err)
 	}
 	defer resp.Body.Close()
 
-	cc.logger.Printf("fetchFromAPI: received response with status %d", resp.StatusCode)
+	cc.logger.Debug("fetchFromAPI: received response with status", "status_code", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		bodyText := "unknown error"
@@ -258,17 +275,17 @@ func (cc *CachedCurrencyConverter) fetchFromAPI(symbols []string) ([]float32, er
 			b, _ := io.ReadAll(resp.Body)
 			bodyText = string(b)
 		}
-		cc.logger.Printf("fetchFromAPI: API returned non-OK status %d, body: %s", resp.StatusCode, bodyText[:200])
+		cc.logger.Error("fetchFromAPI: API returned non-OK status", "status_code", resp.StatusCode, "body_snippet", string(bodyText)[:200])
 		return nil, fmt.Errorf("api returned status %d", resp.StatusCode)
 	}
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		cc.logger.Printf("fetchFromAPI: failed to read response body: %v", err)
+		cc.logger.Error("fetchFromAPI: failed to read response body", "err", err)
 		return nil, fmt.Errorf("failed to read api response: %w", err)
 	}
-	cc.logger.Printf("fetchFromAPI: read %d bytes from response body", len(body))
+	cc.logger.Debug("fetchFromAPI: read response body", "body_bytes", len(body))
 
 	// Parse the API response
 	var apiResp struct {
@@ -278,14 +295,14 @@ func (cc *CachedCurrencyConverter) fetchFromAPI(symbols []string) ([]float32, er
 	}
 
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		cc.logger.Printf("fetchFromAPI: failed to parse API response JSON: %v", err)
+		cc.logger.Error("fetchFromAPI: failed to parse API response JSON", "err", err)
 		return nil, fmt.Errorf("failed to parse api response: %w", err)
 	}
 
-	cc.logger.Printf("fetchFromAPI: parsed API result: %s, base: %s, %d rate entries", apiResp.Result, apiResp.BaseCode, len(apiResp.Rates))
+	cc.logger.Debug("fetchFromAPI: parsed API result", "result", apiResp.Result, "base_code", apiResp.BaseCode, "rates_count", len(apiResp.Rates))
 
 	if apiResp.Result != "success" {
-		cc.logger.Printf("fetchFromAPI: API returned error result: %s", apiResp.Result)
+		cc.logger.Error("fetchFromAPI: API returned error result", "result", apiResp.Result)
 		return nil, fmt.Errorf("api returned error result: %s", apiResp.Result)
 	}
 
@@ -299,6 +316,14 @@ func (cc *CachedCurrencyConverter) fetchFromAPI(symbols []string) ([]float32, er
 		}
 	}
 
-	cc.logger.Printf("fetchFromAPI: built rates result with %d rates for symbols: %v", len(result), symbols)
+	cc.logger.Debug("fetchFromAPI: built rates result", "rates_count", len(result), "symbols", symbols)
 	return result, nil
+}
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
