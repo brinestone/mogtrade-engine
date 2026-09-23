@@ -94,6 +94,14 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters(ctx context.Context) error {
+	ioc.Factory(func(l *slog.Logger) contract.CurrencyConverter {
+		cc := sources.NewCachedCurrencyConverter(sources.CurrencyConverterConfig{
+			TTLSeconds:  int64((time.Minute * 5).Seconds()),
+			DefaultBase: "XAF",
+			Logger:      l,
+		}, sources.UsingExchangeRateApi(os.Getenv("EXCHANGE_RATE_API_KEY")))
+		return cc
+	})
 	ioc.Factory(func() *sources.MassiveMarketInfoProvider {
 		return sources.NewMassiveMarketInfoProvider(os.Getenv("MASSIVE_API_KEY"))
 	}, true)
