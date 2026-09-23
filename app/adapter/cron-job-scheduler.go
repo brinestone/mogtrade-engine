@@ -60,5 +60,5 @@ func (c *CronJobScheduler) Start() {
 		}
 	}
 	c.cron.Start()
-	c.logger.Info("started scheduled jobs")
+	c.logger.Debug("started scheduled jobs")
 }

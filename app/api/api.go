@@ -86,10 +86,10 @@ func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
 	dsn := os.Getenv("SENTRY_DSN")
 	if len(dsn) > 0 {
 		if err := sentry.Init(sentry.ClientOptions{
-			Dsn:         dsn,
-			Environment: "development",
-
-			Debug: true,
+			Dsn:           dsn,
+			Environment:   "development",
+			EnableTracing: true,
+			Debug:         true,
 		}); err != nil {
 			panic(err)
 		}

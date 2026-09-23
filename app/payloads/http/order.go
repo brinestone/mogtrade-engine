@@ -1,9 +1,47 @@
 package httppayloads
 
 import (
+	"time"
+
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/shopspring/decimal"
 )
+
+type OrderPayload struct {
+	Id         string              `json:"id"`
+	Symbol     string              `json:"symbol"`
+	Side       string              `json:"side"`
+	Type       string              `json:"type"`
+	Quantity   decimal.Decimal     `json:"qty"`
+	LimitPrice decimal.NullDecimal `json:"limitPrice,omitempty"`
+	StopPrice  decimal.NullDecimal `json:"stopPrice,omitempty"`
+	Status     *db.OrderStatus     `json:"status,omitempty"`
+	CreatedAt  time.Time           `json:"createdAt"`
+	UpdatedAt  time.Time           `json:"updatedAt"`
+}
+
+func mapOrderToDto(o db.Order) OrderPayload {
+	return OrderPayload{
+		Id:         o.ID,
+		Symbol:     o.Symbol,
+		Side:       string(o.Side),
+		Type:       string(o.OrderType),
+		Quantity:   o.Quantity,
+		LimitPrice: o.LimitPrice,
+		StopPrice:  o.StopPrice,
+		Status:     o.Status,
+		CreatedAt:  o.CreatedAt.Time,
+		UpdatedAt:  o.UpdatedAt.Time,
+	}
+}
+
+func MapOrdersToDto(o []db.Order) []OrderPayload {
+	result := make([]OrderPayload, 0)
+	for _, order := range o {
+		result = append(result, mapOrderToDto(order))
+	}
+	return result
+}
 
 type PlaceOrderPayload struct {
 	Symbol           string              `json:"symbol" form:"symbol" xml:"symbol" binding:"required,min=3"`
@@ -13,6 +51,7 @@ type PlaceOrderPayload struct {
 	StopPrice        decimal.NullDecimal `json:"stopPrice" form:"stopPrice" xml:"stop-price"`
 	IdempotencyToken string              `header:"X-Idempotency-Token" `
 	Quantity         float32             `json:"quantity" form:"quantity" xml:"quantity" binding:"required"`
+	WalletType       db.WalletType       `json:"walletType" binding:"required"`
 }
 
 func (p PlaceOrderPayload) Validate() []string {

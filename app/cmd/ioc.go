@@ -12,12 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryslog "github.com/getsentry/sentry-go/slog"
+
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/core/feed"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/infra/mail"
+	"github.com/brinestone/mogtrade/infra/sources"
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/jobs"
 	"github.com/brinestone/mogtrade/services/market"
@@ -31,6 +35,7 @@ import (
 )
 
 func setupServices() error {
+	ioc.Factory(matching.NewMatchingEngine, true)
 	if err := ioc.Factory(func() *market.ExchangeHub {
 		return market.NewExchangeHub()
 	}, true); err != nil {
@@ -89,6 +94,19 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters(ctx context.Context) error {
+	ioc.Factory(func(l *slog.Logger) contract.CurrencyConverter {
+		cc := sources.NewCachedCurrencyConverter(sources.CurrencyConverterConfig{
+			TTLSeconds:  int64((time.Minute * 5).Seconds()),
+			DefaultBase: "XAF",
+			Logger:      l,
+		}, sources.UsingExchangeRateApi(os.Getenv("EXCHANGE_RATE_API_KEY")))
+		return cc
+	})
+	ioc.Factory(func() *sources.MassiveMarketInfoProvider {
+		return sources.NewMassiveMarketInfoProvider(os.Getenv("MASSIVE_API_KEY"))
+	}, true)
+	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.TickerInfoProvider { return m })
+	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.ExchangeInfoProvider { return m })
 	err := ioc.Factory(func() (mail.Mailer, error) {
 		sender := os.Getenv("MAILTRAP_API_KEY")
 		senderName := "MogTrade"
@@ -185,6 +203,10 @@ func setupLogging(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		sentryHandler := sentryslog.Option{
+			LogLevel:  []slog.Level{slog.LevelInfo, slog.LevelWarn, slog.LevelError},
+			AddSource: true,
+		}.NewSentryHandler(ctx)
 		// Clean up all hooks at once when context drops
 		go func() {
 			defer accessHandle.Close()
@@ -201,6 +223,7 @@ func setupLogging(ctx context.Context) error {
 			slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
 			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
 			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
+			sentryHandler,
 			// slog.NewJSONHandler(errHandler, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
 		))
 	}
@@ -216,6 +239,7 @@ func setupLogging(ctx context.Context) error {
 	return nil
 }
 func bootstrapApplication(ctx context.Context) {
+	initializeSentry()
 	// 1. Set up logging first and let it inject dependencies
 	if err := setupLogging(ctx); err != nil {
 		panic(err)
@@ -257,4 +281,16 @@ func startAsyncTasks(ctx context.Context) {
 	performSeeding(ctx, *pool, *l, *idg)
 	startJobScheduler(ctx)
 	go pullMarketFeed(ctx)
+}
+
+func initializeSentry() {
+	dsn := os.Getenv("SENTRY_DSN")
+	if len(dsn) > 0 {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:           dsn,
+			EnableTracing: true,
+		}); err != nil {
+			panic(err)
+		}
+	}
 }

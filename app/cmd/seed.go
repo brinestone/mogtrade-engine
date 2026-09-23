@@ -26,7 +26,7 @@ func performSeeding(ctx context.Context, p *pgxpool.Pool, l *slog.Logger, idg co
 	if err = createSystemUser(ctx, q, l.With("seeder", "system-user"), idg); err != nil {
 		panic(err)
 	}
-	l.Info("database seeded successfully")
+	l.Debug("database seeded successfully")
 	tx.Commit(ctx)
 }
 
@@ -34,7 +34,7 @@ func createSystemUser(ctx context.Context, q *db.Queries, l *slog.Logger, idg co
 	l.Debug("creating system user account")
 	userId := os.Getenv("SYSTEM_USER_ID")
 	if len(userId) == 0 {
-		l.Warn("skipping seeding of user account, SYSTEM_USER_ID environment variable not defined")
+		l.Debug("skipping seeding of user account, SYSTEM_USER_ID environment variable not defined")
 		return nil
 	}
 	exists, err := q.UserExistsWithId(ctx, userId)
@@ -42,7 +42,7 @@ func createSystemUser(ctx context.Context, q *db.Queries, l *slog.Logger, idg co
 		return err
 	}
 	if exists {
-		l.Warn("system user account already exists, skipping")
+		l.Debug("system user account already exists, skipping")
 		return nil
 	}
 	l.Debug("seeding system user account")
@@ -67,7 +67,7 @@ func createSystemUser(ctx context.Context, q *db.Queries, l *slog.Logger, idg co
 	}); err != nil {
 		return err
 	}
-	l.Info("seeded system user")
+	l.Debug("seeded system user")
 	return createSystemWallets(ctx, q, l, userId)
 }
 func createSystemWallets(ctx context.Context, q *db.Queries, l *slog.Logger, uid string) error {
@@ -133,6 +133,6 @@ func createSystemWallets(ctx context.Context, q *db.Queries, l *slog.Logger, uid
 	}
 	q.RefreshWalletSnapshots(ctx)
 
-	l.Info("seeded system wallets")
+	l.Debug("seeded system wallets")
 	return nil
 }

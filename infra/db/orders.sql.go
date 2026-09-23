@@ -143,6 +143,60 @@ func (q *Queries) FindOrderById(ctx context.Context, id string) (Order, error) {
 	return i, err
 }
 
+const getOrders = `-- name: GetOrders :many
+select
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, filled_quantity, average_fill_price, created_at, updated_at, tracing_id
+from
+    orders
+where
+    id > $1
+order by
+    id
+limit
+    $2
+`
+
+type GetOrdersParams struct {
+	ID    string
+	Limit int32
+}
+
+func (q *Queries) GetOrders(ctx context.Context, arg GetOrdersParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, getOrders, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Symbol,
+			&i.Side,
+			&i.OrderType,
+			&i.Quantity,
+			&i.LimitPrice,
+			&i.StopPrice,
+			&i.ID,
+			&i.ClientOrderID,
+			&i.Status,
+			&i.FilledQuantity,
+			&i.AverageFillPrice,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TracingID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const orderExistsById = `-- name: OrderExistsById :one
 select
     exists (

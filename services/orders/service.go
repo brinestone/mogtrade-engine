@@ -6,22 +6,27 @@ import (
 	"errors"
 
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 )
 
 type PlaceOrderParams struct {
-	TracingId        string
-	OrderId          string
-	IdempotencyToken string
-	PlacedBy         string
-	Symbol           string
-	ExecutionId      string
-	Side             db.OrderSide
-	Type             db.OrderType
-	Quantity         decimal.Decimal
-	LimitPrice       decimal.NullDecimal
-	StopPrice        decimal.NullDecimal
+	TracingId            string
+	OrderId              string
+	IdempotencyToken     string
+	PlacedBy             string
+	Symbol               string
+	WalletId             string
+	SystemWalletId       string
+	WalletTransactionId  string
+	Currency             string
+	Side                 db.OrderSide
+	Type                 db.OrderType
+	Quantity             decimal.Decimal
+	ExchangeRateSnapshot decimal.Decimal
+	LimitPrice           decimal.NullDecimal
+	StopPrice            decimal.NullDecimal
 }
 
 var (
@@ -48,7 +53,21 @@ func CreateOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
 		}
 		return err
 	}
-	return nil
+
+	err = billing.CreditUserWallet(ctx, q, billing.RecordWalletTransactionParams{
+		Id:               p.WalletTransactionId,
+		Src:              &p.WalletId,
+		Dest:             &p.SystemWalletId,
+		Intent:           "order created",
+		ExtraData:        map[string]any{},
+		IdempotencyToken: p.IdempotencyToken,
+		DoneBy:           p.PlacedBy,
+		TracingId:        p.TracingId,
+		Currency:         p.Currency,
+		ExchangeRate:     p.ExchangeRateSnapshot,
+		Value:            p.Quantity.Mul(p.LimitPrice.Decimal).Mul(p.ExchangeRateSnapshot),
+	})
+	return err
 }
 
 type CreateExecutionParams struct {
