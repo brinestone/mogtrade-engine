@@ -105,7 +105,7 @@ func UpdateWalletTransactionStatus(ctx context.Context, q *db.Queries, params Up
 	return err
 }
 
-func CreditUserWallet(ctx context.Context, q *db.Queries, req RecordWalletTransactionParams) error {
+func RecordWalletTransaction(ctx context.Context, q *db.Queries, req RecordWalletTransactionParams) error {
 	exists, err := q.IdempotencyKeyExists(ctx, req.IdempotencyToken)
 	if err != nil {
 		return err

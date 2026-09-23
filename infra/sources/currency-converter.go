@@ -249,7 +249,7 @@ func (cc *CachedCurrencyConverter) getRatesFromSources(base string, currencies [
 // Gets exchange rates for the given symbols against the default base currency.
 // Uses the file-backed cache if available and not expired; otherwise fetches
 // from the configured sources.
-func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, symbols []string) ([]float32, error) {
+func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, symbols ...string) ([]float32, error) {
 	base := cc.defaultBase
 
 	rates, err := cc.getRatesFromSources(base, symbols)
@@ -274,7 +274,7 @@ func (cc *CachedCurrencyConverter) GetDefaultExchangeRates(ctx context.Context, 
 // Gets exchange rates for the given symbols against the specified base currency.
 // Uses the file-backed cache if available and not expired for the default base.
 // For non-default bases, always fetches from the configured sources.
-func (cc *CachedCurrencyConverter) GetExchangeRates(ctx context.Context, base string, symbols []string) ([]float32, error) {
+func (cc *CachedCurrencyConverter) GetExchangeRates(ctx context.Context, base string, symbols ...string) ([]float32, error) {
 	if base == cc.defaultBase {
 		rates, err := cc.getRatesFromSources(base, symbols)
 		if err != nil {

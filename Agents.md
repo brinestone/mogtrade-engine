@@ -31,3 +31,7 @@ The following files/directories should not be accessed at all costs
 - **`.vfox`**: This folder contains sdk symlinks managed by the Version fox sdk manager.
 - **`app/cmd/.env`**: This file contains secret values which should not be exposed. For this, all agents are therefore forbidden from looking into this file. However, an example of this file also exists in the same directory: (**`app/cmd/.env.example`**) for variable reference names.
 - Also ignore all files listed in the .gitignore files
+
+## Conventions
+- Generated identifiers are ULID values.
+- Use the `contract.IdGeneratorFunc` function for creating IDs

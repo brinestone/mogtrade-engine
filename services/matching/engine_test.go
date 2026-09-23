@@ -4,20 +4,29 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/shopspring/decimal"
 	"log/slog"
+
+	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/infra/events"
+	"github.com/shopspring/decimal"
 )
+
+func NewTestLogger(t *testing.T) *slog.Logger {
+	// Use slog.Discard to avoid panics from nil writers.
+	logger := slog.New(slog.DiscardHandler)
+	return logger
+}
 
 func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 	logger := NewTestLogger(t)
-	eng := NewMatchingEngine(logger)
+	eb := events.UseInMemoryEventBus(t.Context())
+	eng := NewMatchingEngine(logger, eb)
 
 	// Insert a sell order at price 100.00 for quantity 5.0
 	sellOrder := PlaceMatchOrderParams{
-		OrderId: "sell-1",
-		Symbol:  "BTCUSD",
-		Type:    db.OrderSideSell,
+		OrderId:  "sell-1",
+		Symbol:   "BTCUSD",
+		Type:     db.OrderSideSell,
 		Quantity: decimal.NewFromFloat(5.0),
 		Price:    decimal.NewFromFloat(100.0),
 	}
@@ -25,17 +34,22 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 
 	// Insert a buy order at price 105.00 for quantity 10.0 (should match 5.0 against sell)
 	buyOrder := PlaceMatchOrderParams{
-		OrderId: "buy-1",
-		Symbol:  "BTCUSD",
-		Type:    db.OrderSideBuy,
+		OrderId:  "buy-1",
+		Symbol:   "BTCUSD",
+		Type:     db.OrderSideBuy,
 		Quantity: decimal.NewFromFloat(10.0),
 		Price:    decimal.NewFromFloat(105.0),
 	}
 	eng.PlaceMatchOrder(buyOrder)
 
-	// Drain the match channel to check events
-	matches := eng.Matches()
-	ev := <-matches
+	// Subscribe to order matched events
+	matches := eb.Subscribe(EventKeyOrderMatched)
+	_ev := <-matches
+	ev, ok := _ev.Data.(OrderMatched)
+	if !ok {
+		t.Fail()
+		return
+	}
 	if ev.BuyOrder != "buy-1" {
 		t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
 	}
@@ -58,13 +72,14 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 
 func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 	logger := NewTestLogger(t)
-	eng := NewMatchingEngine(logger)
+	eb := events.UseInMemoryEventBus(t.Context())
+	eng := NewMatchingEngine(logger, eb)
 
 	// Insert a sell order at price 200.00
 	sellOrder := PlaceMatchOrderParams{
-		OrderId: "sell-1",
-		Symbol:  "ETHUSD",
-		Type:    db.OrderSideSell,
+		OrderId:  "sell-1",
+		Symbol:   "ETHUSD",
+		Type:     db.OrderSideSell,
 		Quantity: decimal.NewFromFloat(3.0),
 		Price:    decimal.NewFromFloat(200.0),
 	}
@@ -72,16 +87,16 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 
 	// Insert a buy order at a lower price (no match because bid < ask)
 	buyOrder := PlaceMatchOrderParams{
-		OrderId: "buy-1",
-		Symbol:  "ETHUSD",
-		Type:    db.OrderSideBuy,
+		OrderId:  "buy-1",
+		Symbol:   "ETHUSD",
+		Type:     db.OrderSideBuy,
 		Quantity: decimal.NewFromFloat(1.0),
 		Price:    decimal.NewFromFloat(150.0),
 	}
 	eng.PlaceMatchOrder(buyOrder)
 
 	// No match event should be generated (or the channel may be empty)
-	matches := eng.Matches()
+	matches := eb.Subscribe(EventKeyOrderMatched)
 	select {
 	case ev := <-matches:
 		t.Logf("Received unexpected match event: %+v", ev)
@@ -92,13 +107,14 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 
 func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	logger := NewTestLogger(t)
-	eng := NewMatchingEngine(logger)
+	eb := events.UseInMemoryEventBus(t.Context())
+	eng := NewMatchingEngine(logger, eb)
 
 	// Sell order with qty 10.0 at price 100.0
 	sellOrder := PlaceMatchOrderParams{
-		OrderId: "sell-1",
-		Symbol:  "SOLUSD",
-		Type:    db.OrderSideSell,
+		OrderId:  "sell-1",
+		Symbol:   "SOLUSD",
+		Type:     db.OrderSideSell,
 		Quantity: decimal.NewFromFloat(10.0),
 		Price:    decimal.NewFromFloat(100.0),
 	}
@@ -106,17 +122,18 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 
 	// Buy order with qty 4.0 at price 105.0 (should match 4.0, leaving 6.0 on sell side)
 	buyOrder := PlaceMatchOrderParams{
-		OrderId: "buy-1",
-		Symbol:  "SOLUSD",
-		Type:    db.OrderSideBuy,
+		OrderId:  "buy-1",
+		Symbol:   "SOLUSD",
+		Type:     db.OrderSideBuy,
 		Quantity: decimal.NewFromFloat(4.0),
 		Price:    decimal.NewFromFloat(105.0),
 	}
 	eng.PlaceMatchOrder(buyOrder)
 
 	// Drain match channel
-	matches := eng.Matches()
-	ev := <-matches
+	matches := eb.Subscribe(EventKeyOrderMatched)
+	_ev := <-matches
+	ev := _ev.Data.(OrderMatched)
 	if ev.BuyOrder != "buy-1" {
 		t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
 	}
@@ -131,16 +148,4 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	default:
 		// no more events
 	}
-}
-
-// NewTestLogger creates a simple test logger that discards output.
-func NewTestLogger(t *testing.T) *slog.Logger {
-	// Use slog.Discard to avoid panics from nil writers.
-	logger := slog.New(slog.DiscardHandler)
-	return logger
-}
-
-func init() {
-	// Ensure decimal.NewFromFloat works as expected.
-	_ = decimal.NewFromFloat(0.0)
 }

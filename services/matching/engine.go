@@ -6,14 +6,19 @@ import (
 	"time"
 
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/shopspring/decimal"
+)
+
+const (
+	EventKeyOrderMatched string = "orders.match"
 )
 
 type MatchingEngine struct {
 	logger      *slog.Logger
 	orderBookMu sync.Mutex
 	orderBook   map[string]*OrderBook
-	matchCh     chan OrderMatchEvent
+	eb          events.EventBus
 }
 
 type PlaceMatchOrderParams struct {
@@ -24,7 +29,7 @@ type PlaceMatchOrderParams struct {
 	Price    decimal.Decimal
 }
 
-type OrderMatchEvent struct {
+type OrderMatched struct {
 	BuyOrder  string
 	SellOrder string
 	Symbol    string
@@ -202,17 +207,13 @@ func (e *MatchingEngine) findMatches(symbol string) {
 	e.logger.Info("findMatches: emitting match event", "symbol", symbol,
 		"matchedSellOrder", matchedSellOrder, "matchedBuyOrder", matchedBuyOrder)
 	if matchedSellOrder != "" || matchedBuyOrder != "" {
-		ev := OrderMatchEvent{
+		ev := OrderMatched{
 			BuyOrder:  matchedBuyOrder,
 			SellOrder: matchedSellOrder,
 			Symbol:    symbol,
 			MatchedAt: time.Now(),
 		}
-		select {
-		case e.matchCh <- ev: // non‑blocking send; drop if buffer full
-		default:
-			// buffer full – could log or retry later.
-		}
+		e.eb.Publish(EventKeyOrderMatched, ev)
 	}
 
 	// 8. Release the outer map mutex.
@@ -220,31 +221,11 @@ func (e *MatchingEngine) findMatches(symbol string) {
 	e.orderBookMu.Unlock()
 }
 
-func (e *MatchingEngine) Matches() <-chan OrderMatchEvent {
-	out := make(chan OrderMatchEvent, 1000)
-	go func() {
-		for {
-			select {
-			case _, ok := <-out:
-				if !ok {
-					return
-				}
-			case ev, ok := <-e.matchCh:
-				if !ok {
-					return
-				}
-				out <- ev
-			}
-		}
-	}()
-	return out
-}
-
-func NewMatchingEngine(l *slog.Logger) *MatchingEngine {
+func NewMatchingEngine(l *slog.Logger, eb events.EventBus) *MatchingEngine {
 	return &MatchingEngine{
 		logger:      l.With("service", "matching-engine"),
 		orderBookMu: sync.Mutex{},
 		orderBook:   make(map[string]*OrderBook),
-		matchCh:     make(chan OrderMatchEvent, 1000),
+		eb:          eb,
 	}
 }

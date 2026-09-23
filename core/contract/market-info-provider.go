@@ -2,6 +2,11 @@ package contract
 
 import "context"
 
+type NullTickerInfo struct {
+	TickerInfo
+	Valid bool
+}
+
 type TickerInfo struct {
 	Symbol   string `json:"symbol"`
 	Currency string `json:"currency"`
@@ -28,11 +33,12 @@ type FindExchangeInfoParams struct {
 }
 type TickerInfoProvider interface {
 	FindTickers(context.Context, FindTickerInfoParams) ([]TickerInfo, error)
+	FindTickerInfoBySymbol(context.Context, string) (NullTickerInfo, error)
 }
 type ExchangeInfoProvider interface {
 	FindExchanges(context.Context, FindExchangeInfoParams) ([]ExchangeInfo, error)
 }
 type CurrencyConverter interface {
-	GetDefaultExchangeRates(context.Context, []string) ([]float32, error)
-	GetExchangeRates(context.Context, string, []string) ([]float32, error)
+	GetDefaultExchangeRates(context.Context, ...string) ([]float32, error)
+	GetExchangeRates(context.Context, string, ...string) ([]float32, error)
 }

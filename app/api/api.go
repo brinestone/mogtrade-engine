@@ -29,8 +29,7 @@ type ApiConfig struct {
 	SessionStore   sessions.Store
 }
 
-func MountApiV1(r *gin.RouterGroup) error {
-	ctx := context.TODO()
+func MountApiV1(ctx context.Context, r *gin.RouterGroup) error {
 
 	router := r.Group("/v1")
 
@@ -38,7 +37,7 @@ func MountApiV1(r *gin.RouterGroup) error {
 		c.MountV1(router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Orders) {
-		c.MountV1(router)
+		c.MountV1(ctx, router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Wallets) {
 		c.MountV1(router)

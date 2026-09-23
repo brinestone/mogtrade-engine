@@ -8,3 +8,4 @@ __debug*
 .idea/
 node_modules
 mcp/build/
+.pi/tasks/

@@ -1,24 +1,22 @@
-package adapter
+package events
 
 import (
 	"context"
 	"sync"
 	"time"
-
-	"github.com/brinestone/mogtrade/infra/events"
 )
 
 type memoryEventBus struct {
 	mu      sync.RWMutex
-	subs    map[string][]events.DataChannel
+	subs    map[string][]DataChannel
 	context context.Context
 }
 
-func (m *memoryEventBus) Subscribe(topic string) events.DataChannel {
+func (m *memoryEventBus) Subscribe(topic string) DataChannel {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ch := make(events.DataChannel)
+	ch := make(DataChannel)
 	m.subs[topic] = append(m.subs[topic], ch)
 	go func(ctx context.Context) {
 		defer close(ch)
@@ -32,11 +30,11 @@ func (m *memoryEventBus) Publish(topic string, data any) {
 	defer m.mu.RUnlock()
 
 	if channels, found := m.subs[topic]; found {
-		go func(chans []events.DataChannel, ev events.Event) {
+		go func(chans []DataChannel, ev Event) {
 			for _, ch := range chans {
 				ch <- ev
 			}
-		}(channels, events.Event{Data: data, Timestamp: time.Now()})
+		}(channels, Event{Data: data, Timestamp: time.Now()})
 	}
 }
 
@@ -44,11 +42,11 @@ func (m *memoryEventBus) Context() context.Context {
 	return m.context
 }
 
-func UseInMemoryEventBus(ctx context.Context) events.EventBus {
+func UseInMemoryEventBus(ctx context.Context) EventBus {
 	bus := &memoryEventBus{
-		mu:      sync.RWMutex{},
 		context: ctx,
-		subs:    make(map[string][]events.DataChannel),
+		mu:      sync.RWMutex{},
+		subs:    make(map[string][]DataChannel),
 	}
 	return bus
 }

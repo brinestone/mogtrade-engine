@@ -84,10 +84,10 @@ type OrderBook struct {
 func (o *OrderBook) AddOrder(p PlaceMatchOrderParams) {
 	var level *priceLevel
 	if p.Type == db.OrderSideSell {
-		level, found := o.asks[p.Price.String()]
+		l, found := o.asks[p.Price.String()]
 		if !found {
 			o.sellMu.Lock()
-			level = &priceLevel{
+			l = &priceLevel{
 				Orders:      list.New(),
 				TotalVolume: decimal.Zero,
 			}
@@ -95,11 +95,12 @@ func (o *OrderBook) AddOrder(p PlaceMatchOrderParams) {
 			o.sellMu.Unlock()
 			o.sellPrices.Push(p.Price)
 		}
+		level = l
 	} else {
-		level, found := o.bids[p.Price.String()]
+		l, found := o.bids[p.Price.String()]
 		if !found {
 			o.buyMu.Lock()
-			level = &priceLevel{
+			l = &priceLevel{
 				Orders:      list.New(),
 				TotalVolume: decimal.Zero,
 			}
@@ -107,6 +108,7 @@ func (o *OrderBook) AddOrder(p PlaceMatchOrderParams) {
 			o.buyMu.Unlock()
 			o.bidPrices.Push(p.Price)
 		}
+		level = l
 	}
 	level.TotalVolume.Add(p.Quantity)
 	level.Orders.PushBack(OrderEntry{
