@@ -45,6 +45,7 @@ func MapOrdersToDto(o []db.Order) []OrderPayload {
 
 type PlaceOrderPayload struct {
 	Symbol           string              `json:"symbol" form:"symbol" xml:"symbol" binding:"required,min=3"`
+	Currency         string              `json:"currency" form:"currency" xml:"currency" binding:"required,min=3,max=3"`
 	Side             string              `json:"side" form:"side" xml:"side" binding:"required"`
 	Type             string              `json:"type" form:"type" xml:"type" binding:"required"`
 	LimitPrice       decimal.NullDecimal `json:"limitPrice" form:"limitPrice" xml:"limit-price"`

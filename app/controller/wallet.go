@@ -72,7 +72,7 @@ func onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, l *slog.Lo
 	}
 
 	txId := idg()
-	err = billing.CreditUserWallet(ctx, repo, billing.RecordWalletTransactionParams{
+	err = billing.RecordWalletTransaction(ctx, repo, billing.RecordWalletTransactionParams{
 		Id:               txId,
 		Src:              new(helpers.GetSystemVirtualWalletId()),
 		Dest:             &vId,

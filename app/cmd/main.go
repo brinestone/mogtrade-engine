@@ -34,7 +34,7 @@ func main() {
 	engine := gin.Default()
 	api.MountGlobalMiddlewares(engine, strings.Split(os.Getenv("ALLOWED_ORIGINS"), ";"))
 	baseRouter := engine.Group("/api")
-	if err := api.MountApiV1(baseRouter); err != nil {
+	if err := api.MountApiV1(ctx, baseRouter); err != nil {
 		panic(err)
 	}
 	startAsyncTasks(ctx)

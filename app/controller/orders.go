@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/billing"
+	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
@@ -18,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
+	"go-slim.dev/ioc"
 )
 
 const (
@@ -25,12 +28,13 @@ const (
 )
 
 type Orders struct {
-	repo        *db.Queries
-	logger      *slog.Logger
-	riskEngine  *orders.RiskEngine
-	pool        *pgxpool.Pool
-	idGenerator contract.IdGeneratorFunc
-	eb          events.EventBus
+	repo           *db.Queries
+	logger         *slog.Logger
+	riskEngine     *orders.RiskEngine
+	pool           *pgxpool.Pool
+	matchingEngine *matching.MatchingEngine
+	idGenerator    contract.IdGeneratorFunc
+	eb             events.EventBus
 }
 
 func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
@@ -38,11 +42,13 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 
 	o.logger.Info("handling request to place orders, validating request")
 	if err := ctx.ShouldBind(&payload); err != nil {
+		o.logger.Warn("form binding validation failed, aborting")
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := ctx.ShouldBindHeader(&payload); err != nil {
+		o.logger.Warn("header binding validation failed, aborting")
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -52,7 +58,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"errors": errMsgs})
 		return
 	}
-	o.logger.Info("request validated successfully, creating order")
+	o.logger.Info("request validated successfully, opening database transaction")
 
 	tx, err := o.pool.Begin(ctx.Request.Context())
 	if err != nil {
@@ -62,6 +68,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 	}
 	defer tx.Rollback(ctx.Request.Context())
 
+	o.logger.Info("transaction opened, getting user wallet info", "wallet-type", payload.WalletType)
 	q := o.repo.WithTx(tx)
 	wallet, err := billing.GetCurrentWalletSnapshot(ctx.Request.Context(), q, billing.GetWalletSnapshotParams{
 		Type:    payload.WalletType,
@@ -73,10 +80,11 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
-		o.logger.Error("could not retrieve wallet snapshot", "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx), "err", err.Error())
+		o.logger.Error("could not retrieve wallet info", "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx), "err", err.Error())
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
 		return
 	}
+	o.logger.Info("wallet info retrieval successful, performing risk checks")
 	result := o.riskEngine.ValidateOrder(ctx.Request.Context(), orders.OrderContext{
 		Symbol:         payload.Symbol,
 		Side:           payload.Side,
@@ -87,29 +95,40 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		AccountBalance: wallet.CurrentBalance,
 	})
 	if !result.Approved {
+		o.logger.Warn("risk check failed, aborting", "reason", result.Reason, "wallet-id", wallet.WalletID, "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx))
 		ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": result.Reason})
 		return
 	}
 
+	o.logger.Info("risk checks passed, creating order")
 	orderId := o.idGenerator()
 	tracingId := o.idGenerator()
 	systemWalletId := helpers.GetSystemWalletByType(wallet.WalletType)
-	err = orders.CreateOrder(ctx.Request.Context(), q, orders.PlaceOrderParams{
-		TracingId:           tracingId,
-		OrderId:             orderId,
-		WalletId:            wallet.WalletID,
-		WalletTransactionId: o.idGenerator(),
-		SystemWalletId:      systemWalletId,
-		IdempotencyToken:    payload.IdempotencyToken,
-		PlacedBy:            helpers.GetCurrentUserId(ctx),
-
-		Symbol:     payload.Symbol,
-		Side:       db.OrderSide(payload.Side),
-		Type:       db.OrderType(payload.Type),
-		Quantity:   decimal.NewFromFloat32(payload.Quantity),
-		LimitPrice: payload.LimitPrice,
-		StopPrice:  payload.StopPrice,
+	_, err = ioc.Invoke(ctx.Request.Context(), func(cc contract.CurrencyConverter, e contract.TickerInfoProvider) error {
+		rate, err := cc.GetDefaultExchangeRates(ctx, payload.Currency)
+		if err != nil {
+			return err
+		}
+		err = orders.PlaceOrder(ctx.Request.Context(), q, orders.PlaceOrderParams{
+			TracingId:            tracingId,
+			OrderId:              orderId,
+			WalletId:             wallet.WalletID,
+			WalletTransactionId:  o.idGenerator(),
+			SystemWalletId:       systemWalletId,
+			IdempotencyToken:     payload.IdempotencyToken,
+			PlacedBy:             helpers.GetCurrentUserId(ctx),
+			Currency:             payload.Currency,
+			ExchangeRateSnapshot: decimal.NewFromFloat32(1 / rate[0]),
+			Symbol:               payload.Symbol,
+			Side:                 db.OrderSide(payload.Side),
+			Type:                 db.OrderType(payload.Type),
+			Quantity:             decimal.NewFromFloat32(payload.Quantity),
+			LimitPrice:           payload.LimitPrice,
+			StopPrice:            payload.StopPrice,
+		})
+		return err
 	})
+
 	if err != nil {
 		if errors.Is(err, orders.ErrDuplicateOrder) {
 			ctx.AbortWithStatus(http.StatusConflict)
@@ -154,21 +173,47 @@ func (o *Orders) handleFindOrders(ctx *gin.Context) {
 		"nextCursor": nextCursor,
 	})
 }
-func (c *Orders) MountV1(r *gin.RouterGroup) {
+func (c *Orders) MountV1(ctx context.Context, r *gin.RouterGroup) {
 	authMiddleware := helpers.ProvideAuthMiddleware()
 	router := r.Group("/orders")
 	router.GET("", c.handleFindOrders)
 
 	secured := router.Group("", authMiddleware)
 	secured.POST("", c.handlePlaceOrder)
+	c.subscribeToEventsV1(ctx)
 }
 
-func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdGeneratorFunc) *Orders {
+func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch events.DataChannel) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-ch:
+			if !ok {
+				continue
+			}
+			_, ok = ev.Data.(matching.OrderMatched)
+			if !ok {
+				continue
+			}
+			// TODO: use the event to create executions. Maybe enrich the event args with more information.
+		}
+	}
+}
+
+func (c *Orders) subscribeToEventsV1(ctx context.Context) {
+	matchFound := c.eb.Subscribe(matching.EventKeyOrderMatched)
+	go c.handleOnMatchFoundEvent(ctx, matchFound)
+}
+
+func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdGeneratorFunc, e *matching.MatchingEngine, eb events.EventBus) *Orders {
 	return &Orders{
-		repo:        q,
-		logger:      l.With("controller", "orders"),
-		riskEngine:  re,
-		pool:        p,
-		idGenerator: idg,
+		repo:           q,
+		logger:         l.With("controller", "orders"),
+		riskEngine:     re,
+		pool:           p,
+		idGenerator:    idg,
+		matchingEngine: e,
+		eb:             eb,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/services/billing"
@@ -34,7 +35,10 @@ var (
 	ErrOrderNotFound  = errors.New("order was not found")
 )
 
-func CreateOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
+func PlaceOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
+	if p.Type != db.OrderTypeLimit {
+		return fmt.Errorf("non-limit orders are not yet supported")
+	}
 	err := q.PlaceOrder(ctx, db.PlaceOrderParams{
 		ID:            p.OrderId,
 		UserID:        &p.PlacedBy,
@@ -54,7 +58,16 @@ func CreateOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
 		return err
 	}
 
-	err = billing.CreditUserWallet(ctx, q, billing.RecordWalletTransactionParams{
+	var price decimal.Decimal
+	switch p.Type {
+	case db.OrderTypeLimit:
+		price = p.LimitPrice.Decimal
+	case db.OrderTypeStop:
+
+	case db.OrderTypeMarket:
+
+	}
+	err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
 		Id:               p.WalletTransactionId,
 		Src:              &p.WalletId,
 		Dest:             &p.SystemWalletId,
@@ -65,7 +78,7 @@ func CreateOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
 		TracingId:        p.TracingId,
 		Currency:         p.Currency,
 		ExchangeRate:     p.ExchangeRateSnapshot,
-		Value:            p.Quantity.Mul(p.LimitPrice.Decimal).Mul(p.ExchangeRateSnapshot),
+		Value:            p.Quantity.Mul(price).Mul(p.ExchangeRateSnapshot),
 	})
 	return err
 }
