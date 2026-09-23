@@ -125,7 +125,7 @@ func setupAdapters(ctx context.Context) error {
 		return adapter.NewCronJobScheduler(ctx, l.With("service", "job-scheduler"))
 	}, true)
 	ioc.Factory(func() events.EventBus {
-		return adapter.UseInMemoryEventBus(ctx)
+		return events.UseInMemoryEventBus(ctx)
 	}, true)
 	ioc.Bind(adapter.UlidIdGenerator)
 	ioc.Factory(func() *adapter.JwtAdapter {
