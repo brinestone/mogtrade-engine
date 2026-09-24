@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/shopspring/decimal"
 )
 
@@ -14,11 +14,11 @@ const (
 	EventKeyOrderMatched string = "orders.match"
 )
 
-type MatchingEngine struct {
+type Engine struct {
 	logger      *slog.Logger
 	orderBookMu sync.Mutex
 	orderBook   map[string]*OrderBook
-	eb          events.EventBus
+	eb          contract.EventBus
 }
 
 type PlaceMatchOrderParams struct {
@@ -36,7 +36,7 @@ type OrderMatched struct {
 	MatchedAt time.Time
 }
 
-func (e *MatchingEngine) PlaceMatchOrder(p PlaceMatchOrderParams) {
+func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
 	// acquire / create the OrderBook for this symbol
 	e.logger.Info("PlaceMatchOrder called", "symbol", p.Symbol, "orderId", p.OrderId, "quantity", p.Quantity, "type", p.Type)
 	book, found := e.orderBook[p.Symbol]
@@ -57,16 +57,15 @@ func (e *MatchingEngine) PlaceMatchOrder(p PlaceMatchOrderParams) {
 	e.logger.Info("Order added to book", "symbol", p.Symbol, "orderId", p.OrderId, "quantity", p.Quantity)
 
 	// start matching without holding the outer map mutex
-	e.logger.Info("Starting findMatches", "symbol", p.Symbol)
-	e.findMatches(p.Symbol)
-	e.logger.Info("findMatches completed", "symbol", p.Symbol)
+	e.logger.Info("finding matches", "symbol", p.Symbol)
+	go e.findMatches(p.Symbol)
 }
 
 // findMatches attempts to match as much as possible against the opposite side
 // of the order book for the given symbol. It respects price‑time priority,
 // updates quantities, removes fully‑filled orders, and emits a single
 // OrderMatchEvent on the engine's matchCh channel.
-func (e *MatchingEngine) findMatches(symbol string) {
+func (e *Engine) findMatches(symbol string) {
 	// 1. Acquire outer map mutex just long enough to fetch the *OrderBook.
 	e.logger.Info("findMatches: acquiring outer map mutex", "symbol", symbol)
 	e.orderBookMu.Lock()
@@ -221,8 +220,8 @@ func (e *MatchingEngine) findMatches(symbol string) {
 	e.orderBookMu.Unlock()
 }
 
-func NewMatchingEngine(l *slog.Logger, eb events.EventBus) *MatchingEngine {
-	return &MatchingEngine{
+func NewMatchingEngine(l *slog.Logger, eb contract.EventBus) *Engine {
+	return &Engine{
 		logger:      l.With("service", "matching-engine"),
 		orderBookMu: sync.Mutex{},
 		orderBook:   make(map[string]*OrderBook),

@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/brinestone/mogtrade/core/contract"
-	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
@@ -25,8 +23,10 @@ import (
 type Auth struct {
 	repo            *db.Queries
 	logger          *slog.Logger
-	connGetter      infra.ConnProviderFunc
+	pool            *pgxpool.Pool
 	refreshLifetime time.Duration
+	tokenEncoder    contract.TokenEncoder
+	idg             contract.IdGeneratorFunc
 }
 
 const (
@@ -51,27 +51,24 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		return
 	}
 
-	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(cp infra.ConnProviderFunc, p *pgxpool.Pool, q *db.Queries, te auth.TokenEncoder, idg contract.IdGeneratorFunc) (auth.SignInResult, error) {
-		a.logger.Debug("validation successful, signing in user", "email", request.Username, "type", "credential")
-		tx, err := p.Begin(c.Request.Context())
-		if err != nil {
-			a.logger.Error("unable to open transaction, aborting")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
-			return auth.SignInResult{}, err
-		}
-		defer tx.Commit(c.Request.Context())
+	a.logger.Debug("validation successful, signing in user", "email", request.Username, "type", "credential")
+	tx, err := a.pool.Begin(c.Request.Context())
+	if err != nil {
+		a.logger.Error("unable to open transaction, aborting", "err", err.Error())
+		helpers.InternalServerError(c)
+		return
+	}
+	defer tx.Commit(c.Request.Context())
 
-		result, err := auth.SignInUserByCredentials(c.Request.Context(), q.WithTx(tx), te, idg, auth.CredentialSignInInput{
-			Identifier:           request.Username,
-			Password:             request.Password,
-			DeviceId:             request.DeviceId,
-			RefreshTokenLifetime: a.refreshLifetime,
-		})
-		if err != nil {
-			tx.Rollback(c.Request.Context())
-		}
-		return result, err
+	result, err := auth.SignInUserByCredentials(c.Request.Context(), a.repo.WithTx(tx), a.tokenEncoder, auth.CredentialSignInInput{
+		Identifier:           request.Username,
+		Password:             request.Password,
+		DeviceId:             request.DeviceId,
+		RefreshTokenLifetime: a.refreshLifetime,
 	})
+	if err != nil {
+		tx.Rollback(c.Request.Context())
+	}
 	if err != nil {
 		if errors.Is(err, auth.ErrInavlidCredentials) || errors.Is(err, auth.ErrNoAuthAccountFound) {
 			a.logger.Warn("sign in failed, aborting", "email", request.Username, "type", "credential", "err", err.Error())
@@ -79,7 +76,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 			return
 		}
 		a.logger.Error("sign in failed, aborting", "err", err.Error(), "email", request.Username)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(c)
 		return
 	}
 
@@ -128,11 +125,11 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 			return
 		}
 		a.logger.Error("user creation failed, aborting", "err", err.Error(), "email", request.Email)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(c)
 		return
 	}
 
-	_, err = ioc.Invoke(c.Request.Context(), func(bus events.EventBus) {
+	_, err = ioc.Invoke(c.Request.Context(), func(bus contract.EventBus) {
 		go bus.Publish(EventKeyUserCreatedV1, eventpayloads.UserCreatedEventArgs{
 			UserId:    result.UserId,
 			Timestamp: result.Timestamp,
@@ -154,23 +151,21 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 		return
 	}
 
-	result, err := ioc.Call2[auth.SignInResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc, t auth.TokenEncoder) (auth.SignInResult, error) {
-		tx, err := p.Begin(c.Request.Context())
-		if err != nil {
-			a.logger.Error("could not open database transaction", "err", err.Error())
-			return auth.SignInResult{}, err
-		}
-		defer tx.Rollback(c.Request.Context())
+	tx, err := a.pool.Begin(c.Request.Context())
+	if err != nil {
+		a.logger.Error("could not open database transaction", "err", err.Error())
+		helpers.InternalServerError(c)
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
 
-		sResult, err := auth.RotateAccessToken(c.Request.Context(), q.WithTx(tx), idg, t, auth.RotateAccessTokenInput{
-			Lifetime: a.refreshLifetime,
-			DeviceId: req.DeviceId,
-			Hash:     req.RefreshToken,
-		})
-
-		tx.Commit(c.Request.Context())
-		return sResult, err
+	sResult, err := auth.RotateAccessToken(c.Request.Context(), a.repo.WithTx(tx), a.tokenEncoder, auth.RotateAccessTokenInput{
+		RefreshTokenId: a.idg(),
+		Lifetime:       a.refreshLifetime,
+		DeviceId:       req.DeviceId,
+		Hash:           req.RefreshToken,
 	})
+
 	if err != nil {
 		if errors.Is(err, auth.ErrRefreshTokenUnusable) || errors.Is(err, auth.ErrUserNotFound) || errors.Is(err, auth.ErrRefreshTokenNotFound) {
 			a.logger.Warn("token error", "err", err.Error())
@@ -178,13 +173,14 @@ func (a *Auth) handleAccessTokenRefresh(c *gin.Context) {
 			return
 		}
 		a.logger.Error("error while rotating access token", "err", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(c)
 		return
 	}
+	tx.Commit(c.Request.Context())
+	c.JSON(http.StatusOK, sResult)
 
 	helpers.PublishEvent(c.Request.Context(), EventKeyRefreshTokenRotateV1, nil) // TODO: make an event arg for this
 	a.logger.Info("refresh token rotated successfully!")
-	c.JSON(http.StatusOK, result)
 }
 
 // handleEmailExistsCheck checks whether a user exists with the specified email address
@@ -192,7 +188,7 @@ func (a *Auth) handleEmailExistsCheck(c *gin.Context) {
 	queries := make(map[string]string)
 	if err := c.BindQuery(&queries); err != nil {
 		a.logger.Error("could not parse query parameters", "err", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(c)
 		return
 	}
 
@@ -206,21 +202,21 @@ func (a *Auth) handleEmailExistsCheck(c *gin.Context) {
 	available, err := a.repo.IsEmailAvailable(c.Request.Context(), email)
 	if err != nil {
 		a.logger.Error("could not check for email availability", "err", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(c)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"available": available})
 }
 
 func (a *Auth) MountV1(r *gin.RouterGroup) {
-	router := r.Group("/auth")
-	router.POST("/login/credential", a.handleCredentialLogin)
-	router.POST("/register/credential", a.handleCredentialRegister)
-	router.GET("/refresh", a.handleAccessTokenRefresh)
-	router.GET("/email-available", a.handleEmailExistsCheck)
+	public := r.Group("/auth")
+	public.POST("/login/credential", a.handleCredentialLogin)
+	public.POST("/register/credential", a.handleCredentialRegister)
+	public.GET("/refresh", a.handleAccessTokenRefresh)
+	public.GET("/email-available", a.handleEmailExistsCheck)
 }
 
-func NewAuthController(l *slog.Logger, q *db.Queries, cg infra.ConnProviderFunc) *Auth {
+func NewAuthController(idg contract.IdGeneratorFunc, l *slog.Logger, q *db.Queries, p *pgxpool.Pool, te contract.TokenEncoder) *Auth {
 	var lifetime time.Duration
 	lifetime, err := time.ParseDuration(os.Getenv("REFRESH_LIFETIME"))
 	if err != nil {
@@ -228,6 +224,11 @@ func NewAuthController(l *slog.Logger, q *db.Queries, cg infra.ConnProviderFunc)
 		lifetime = 7 * 24 * time.Hour
 	}
 	return &Auth{
-		q, l.With("controller", "auth"), cg, lifetime,
+		idg:             idg,
+		repo:            q,
+		logger:          l.With("controller", "auth"),
+		pool:            p,
+		refreshLifetime: lifetime,
+		tokenEncoder:    te,
 	}
 }

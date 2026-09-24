@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/brinestone/mogtrade/services/auth"
+	"github.com/brinestone/mogtrade/core/contract"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func RequireAuth(l *slog.Logger, v auth.TokenVerifier) gin.HandlerFunc {
+func RequireAuth(l *slog.Logger, v contract.TokenVerifier) gin.HandlerFunc {
 	l2 := l.With("midddleware", "auth-jwt")
 	return func(c *gin.Context) {
 		authHeaderValue, found := c.Request.Header["Authorization"]
@@ -30,6 +30,9 @@ func RequireAuth(l *slog.Logger, v auth.TokenVerifier) gin.HandlerFunc {
 
 		valid, err := v.VerifyToken(token, func(id string) {
 			c.Set("uid", id)
+		})
+		v.VerifyWithClaims(token, func(claims map[string]any) {
+			c.Set("claims", claims)
 		})
 		if err != nil {
 			if errors.Is(err, jwt.ErrTokenSignatureInvalid) || errors.Is(err, jwt.ErrTokenInvalidClaims) {

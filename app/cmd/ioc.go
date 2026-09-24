@@ -18,16 +18,15 @@ import (
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/core/feed"
 	"github.com/brinestone/mogtrade/infra"
+	"github.com/brinestone/mogtrade/infra/adapter"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/infra/mail"
 	"github.com/brinestone/mogtrade/infra/sources"
-	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/jobs"
 	"github.com/brinestone/mogtrade/services/market"
 	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/services/orders"
-	"github.com/brinestone/mogtrade/web/adapter"
 	"github.com/brinestone/mogtrade/web/api"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -124,7 +123,7 @@ func setupAdapters(ctx context.Context) error {
 	ioc.Factory(func(l *slog.Logger) contract.JobScheduler {
 		return adapter.NewCronJobScheduler(ctx, l.With("service", "job-scheduler"))
 	}, true)
-	ioc.Factory(func() events.EventBus {
+	ioc.Factory(func() contract.EventBus {
 		return events.UseInMemoryEventBus(ctx)
 	}, true)
 	ioc.Bind(adapter.UlidIdGenerator)
@@ -143,10 +142,10 @@ func setupAdapters(ctx context.Context) error {
 		}
 		return adapter.NewJwtTokenEncoder(os.Getenv("JWT_SECRET"), lifetime, hosts, os.Getenv("HOST"))
 	})
-	ioc.Factory(func(j *adapter.JwtAdapter) auth.TokenEncoder {
+	ioc.Factory(func(j *adapter.JwtAdapter) contract.TokenEncoder {
 		return j
 	})
-	ioc.Factory(func(j *adapter.JwtAdapter) auth.TokenVerifier { return j })
+	ioc.Factory(func(j *adapter.JwtAdapter) contract.TokenVerifier { return j })
 	return nil
 }
 
@@ -260,6 +259,7 @@ func bootstrapApplication(ctx context.Context) {
 	if err := api.SetupControllers(); err != nil {
 		panic(err)
 	}
+	api.SetupMiddlewares()
 
 	if err := registerBackgroundJobs(ctx); err != nil {
 		panic(err)

@@ -1,10 +1,15 @@
 package adapter
 
 import (
+	"errors"
 	"time"
 
-	"github.com/brinestone/mogtrade/services/auth"
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/golang-jwt/jwt/v5"
+)
+
+var (
+	ErrClaimsParsing = errors.New("could not parse JWT claims to app claims")
 )
 
 type JwtAdapter struct {
@@ -14,12 +19,30 @@ type JwtAdapter struct {
 	issuer        string
 }
 
+// VerifyWithClaims implements [contract.TokenVerifier].
+func (e *JwtAdapter) VerifyWithClaims(token string, consumer contract.ClaimsConsumerFunc) (bool, error) {
+	t, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
+		return e.secret, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}), jwt.WithExpirationRequired(), jwt.WithAudience(e.audiences...))
+	if err != nil {
+		return false, err
+	}
+
+	appClaims, ok := t.Claims.(AppClaims)
+	if !ok {
+		return false, ErrClaimsParsing
+	}
+	defer consumer(appClaims.CustomFields)
+
+	return t.Valid, nil
+}
+
 type AppClaims struct {
 	CustomFields map[string]any `json:"custom_fields,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func (e *JwtAdapter) VerifyToken(token string, g auth.IdCallbackFunc) (bool, error) {
+func (e *JwtAdapter) VerifyToken(token string, g contract.IdConsumerFunc) (bool, error) {
 	t, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
 		return e.secret, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}), jwt.WithExpirationRequired(), jwt.WithAudience(e.audiences...))

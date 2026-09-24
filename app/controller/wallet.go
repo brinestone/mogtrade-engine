@@ -10,7 +10,6 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/brinestone/mogtrade/web/helpers"
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
@@ -129,9 +128,9 @@ func (w *Wallets) MountV1(r *gin.RouterGroup) {
 	ioc.Invoke(context.TODO(), w.subscribeToEventsV1)
 }
 
-func (w *Wallets) subscribeToEventsV1(eb events.EventBus) {
+func (w *Wallets) subscribeToEventsV1(eb contract.EventBus) {
 	userCreatedCh := eb.Subscribe(EventKeyUserCreatedV1)
-	go func(ch events.DataChannel, p *pgxpool.Pool, l *slog.Logger, vsb decimal.Decimal, rsb decimal.Decimal, idg contract.IdGeneratorFunc) {
+	go func(ch contract.DataChannel, p *pgxpool.Pool, l *slog.Logger, vsb decimal.Decimal, rsb decimal.Decimal, idg contract.IdGeneratorFunc) {
 		for event := range ch {
 			ev, ok := event.Data.(eventpayloads.UserCreatedEventArgs)
 			if !ok {

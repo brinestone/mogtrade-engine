@@ -15,15 +15,6 @@ import (
 	"github.com/brinestone/mogtrade/services/kyc"
 )
 
-type TokenEncoder interface {
-	EncodeWithClaims(map[string]any, string) (string, error)
-}
-
-type IdCallbackFunc func(string)
-type TokenVerifier interface {
-	VerifyToken(string, IdCallbackFunc) (bool, error)
-}
-
 type SignInResult struct {
 	AccessToken  string `json:"accessToken" xml:"accestoken"`
 	RefreshToken string `json:"refreshToken" xml:"refreshtoken"`
@@ -37,10 +28,11 @@ type SignUpResult struct {
 }
 
 type CredentialSignInInput struct {
+	RefreshTokenId       string
 	Identifier           string
 	Password             string
-	RefreshTokenLifetime time.Duration
 	DeviceId             string
+	RefreshTokenLifetime time.Duration
 }
 
 type CredentialSignUpInput struct {
@@ -52,9 +44,10 @@ type CredentialSignUpInput struct {
 }
 
 type RotateAccessTokenInput struct {
-	Lifetime time.Duration
-	DeviceId string
-	Hash     string
+	RefreshTokenId string
+	DeviceId       string
+	Hash           string
+	Lifetime       time.Duration
 }
 
 var (
@@ -66,7 +59,7 @@ var (
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 )
 
-func RotateAccessToken(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, te TokenEncoder, r RotateAccessTokenInput) (SignInResult, error) {
+func RotateAccessToken(ctx context.Context, q *db.Queries, te contract.TokenEncoder, r RotateAccessTokenInput) (SignInResult, error) {
 	row, err := q.LookupRefreshTokenByDevice(ctx, db.LookupRefreshTokenByDeviceParams{DeviceID: r.DeviceId, TokenHash: r.Hash})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -98,7 +91,7 @@ func RotateAccessToken(ctx context.Context, q *db.Queries, idg contract.IdGenera
 
 	q.InvalidateRefreshTokensForDevice(ctx, r.DeviceId)
 	err = q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
-		ID:          idg(),
+		ID:          r.RefreshTokenId,
 		UserID:      row.UserID,
 		DeviceID:    r.DeviceId,
 		TokenHash:   newRefresh,
@@ -151,7 +144,7 @@ func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.Id
 	}, nil
 }
 
-func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder, idg contract.IdGeneratorFunc, csi CredentialSignInInput) (SignInResult, error) {
+func SignInUserByCredentials(ctx context.Context, q *db.Queries, te contract.TokenEncoder, csi CredentialSignInInput) (SignInResult, error) {
 	account, err := q.FindCredentialAccountById(ctx, csi.Identifier)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -174,7 +167,7 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder
 	}
 	q.InvalidateRefreshTokensForDevice(ctx, csi.DeviceId)
 	err = q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
-		ID:          idg(),
+		ID:          csi.RefreshTokenId,
 		UserID:      account.UserID,
 		DeviceID:    csi.DeviceId,
 		TokenHash:   refreshToken,
@@ -187,7 +180,7 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder
 	return SignInResult{AccessToken: accessToken, RefreshToken: refreshToken}, nil
 }
 
-func generateAuthTokenPairs(u db.User, kycStatus contract.KYCStatus, te TokenEncoder) (string, string, error) {
+func generateAuthTokenPairs(u db.User, kycStatus contract.KYCStatus, te contract.TokenEncoder) (string, string, error) {
 	claims := getUserClaims(&u)
 	maps.Copy(claims, map[string]any{
 		"kyc_status": kycStatus,

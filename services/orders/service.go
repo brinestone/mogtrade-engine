@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 )
@@ -58,28 +57,6 @@ func PlaceOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
 		return err
 	}
 
-	var price decimal.Decimal
-	switch p.Type {
-	case db.OrderTypeLimit:
-		price = p.LimitPrice.Decimal
-	case db.OrderTypeStop:
-
-	case db.OrderTypeMarket:
-
-	}
-	err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
-		Id:               p.WalletTransactionId,
-		Src:              &p.WalletId,
-		Dest:             &p.SystemWalletId,
-		Intent:           "order created",
-		ExtraData:        map[string]any{},
-		IdempotencyToken: p.IdempotencyToken,
-		DoneBy:           p.PlacedBy,
-		TracingId:        p.TracingId,
-		Currency:         p.Currency,
-		ExchangeRate:     p.ExchangeRateSnapshot,
-		Value:            p.Quantity.Mul(price).Mul(p.ExchangeRateSnapshot),
-	})
 	return err
 }
 

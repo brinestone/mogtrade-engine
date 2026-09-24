@@ -2,7 +2,7 @@ package eventpayloads
 
 import "time"
 
-type OrderCreated struct {
+type OrderPlaced struct {
 	OrderId   string
 	Timestamp time.Time
 }

@@ -33,11 +33,14 @@ func MountApiV1(ctx context.Context, r *gin.RouterGroup) error {
 
 	router := r.Group("/v1")
 
+	ioc.Invoke(ctx, func(c *controller.KYC) {
+		c.MountV1(router)
+	})
 	ioc.Invoke(ctx, func(c *controller.Auth) {
 		c.MountV1(router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Orders) {
-		c.MountV1(ctx, router)
+		c.MountV1(router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Wallets) {
 		c.MountV1(router)
@@ -60,6 +63,7 @@ func mountHealth(r *gin.RouterGroup) {
 }
 
 func SetupControllers() error {
+	ioc.Factory(controller.NewKycController, true)
 	ioc.Factory(controller.NewFeedController, true)
 	ioc.Factory(controller.NewOrdersController, true)
 	ioc.Factory(controller.NewAuthController, true)
@@ -67,8 +71,12 @@ func SetupControllers() error {
 		return controller.NewWalletsController(r, l, p, decimal.NewFromFloat(100_000), decimal.Zero, idg)
 	}, true)
 	ioc.Factory(controller.NewUserController, true)
-	ioc.NamedFactory("middleware.auth", middleware.RequireAuth)
 	return nil
+}
+
+func SetupMiddlewares() {
+	ioc.NamedFactory("middleware.auth", middleware.RequireAuth)
+	ioc.NamedFactory("middleware.kyc", middleware.RequireKycVerified)
 }
 
 func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
@@ -85,10 +93,11 @@ func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
 	dsn := os.Getenv("SENTRY_DSN")
 	if len(dsn) > 0 {
 		if err := sentry.Init(sentry.ClientOptions{
-			Dsn:           dsn,
-			Environment:   "development",
-			EnableTracing: true,
-			Debug:         true,
+			Dsn:              dsn,
+			Environment:      "development",
+			EnableTracing:    true,
+			TracesSampleRate: .5,
+			Debug:            true,
 		}); err != nil {
 			panic(err)
 		}

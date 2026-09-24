@@ -10,7 +10,6 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/services/orders"
@@ -32,9 +31,10 @@ type Orders struct {
 	logger         *slog.Logger
 	riskEngine     *orders.RiskEngine
 	pool           *pgxpool.Pool
-	matchingEngine *matching.MatchingEngine
+	matchingEngine *matching.Engine
 	idGenerator    contract.IdGeneratorFunc
-	eb             events.EventBus
+	eb             contract.EventBus
+	cc             contract.CurrencyConverter
 }
 
 func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
@@ -63,7 +63,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 	tx, err := o.pool.Begin(ctx.Request.Context())
 	if err != nil {
 		o.logger.Error("could not begin database transaction", "err", err.Error())
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(ctx)
 		return
 	}
 	defer tx.Rollback(ctx.Request.Context())
@@ -77,11 +77,11 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 	if err != nil {
 		if errors.Is(err, billing.ErrWalletNotFound) {
 			o.logger.Warn("wallet not found", "uid", helpers.GetCurrentUserId(ctx), "wallet-type", payload.WalletType)
-			ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			helpers.InternalServerError(ctx)
 			return
 		}
 		o.logger.Error("could not retrieve wallet info", "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx), "err", err.Error())
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(ctx)
 		return
 	}
 	o.logger.Info("wallet info retrieval successful, performing risk checks")
@@ -109,6 +109,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		if err != nil {
 			return err
 		}
+		exchangeRate := decimal.NewFromFloat32(1 / rate[0])
 		err = orders.PlaceOrder(ctx.Request.Context(), q, orders.PlaceOrderParams{
 			TracingId:            tracingId,
 			OrderId:              orderId,
@@ -118,7 +119,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			IdempotencyToken:     payload.IdempotencyToken,
 			PlacedBy:             helpers.GetCurrentUserId(ctx),
 			Currency:             payload.Currency,
-			ExchangeRateSnapshot: decimal.NewFromFloat32(1 / rate[0]),
+			ExchangeRateSnapshot: exchangeRate,
 			Symbol:               payload.Symbol,
 			Side:                 db.OrderSide(payload.Side),
 			Type:                 db.OrderType(payload.Type),
@@ -126,7 +127,35 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			LimitPrice:           payload.LimitPrice,
 			StopPrice:            payload.StopPrice,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+
+		err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
+			Id:               o.idGenerator(),
+			Src:              &wallet.WalletID,
+			Dest:             &systemWalletId,
+			Intent:           "order placed",
+			ExtraData:        map[string]any{},
+			IdempotencyToken: payload.IdempotencyToken,
+			DoneBy:           helpers.GetCurrentUserId(ctx),
+			TracingId:        tracingId,
+			Currency:         payload.Currency,
+			ExchangeRate:     exchangeRate,
+			Value:            decimal.NewFromFloat32(payload.Quantity).Mul(payload.LimitPrice.Decimal),
+		})
+		if err != nil {
+			return err
+		}
+
+		o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
+			OrderId:  orderId,
+			Symbol:   payload.Symbol,
+			Type:     db.OrderSide(payload.Side),
+			Quantity: decimal.NewFromFloat32(payload.Quantity),
+			Price:    payload.LimitPrice.Decimal,
+		})
+		return nil
 	})
 
 	if err != nil {
@@ -141,7 +170,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 	tx.Commit(ctx.Request.Context())
 
 	ctx.Status(http.StatusCreated)
-	o.eb.Publish(EventKeyOrderCreatedV1, eventpayloads.OrderCreated{
+	o.eb.Publish(EventKeyOrderCreatedV1, eventpayloads.OrderPlaced{
 		OrderId:   orderId,
 		Timestamp: time.Now(),
 	})
@@ -173,17 +202,20 @@ func (o *Orders) handleFindOrders(ctx *gin.Context) {
 		"nextCursor": nextCursor,
 	})
 }
-func (c *Orders) MountV1(ctx context.Context, r *gin.RouterGroup) {
+func (c *Orders) MountV1(r *gin.RouterGroup) {
 	authMiddleware := helpers.ProvideAuthMiddleware()
+	kycMiddleware := helpers.ProvideKYCMiddleware()
+
 	router := r.Group("/orders")
-	router.GET("", c.handleFindOrders)
+	public := router.Group("")
+	public.GET("", c.handleFindOrders)
 
 	secured := router.Group("", authMiddleware)
-	secured.POST("", c.handlePlaceOrder)
-	c.subscribeToEventsV1(ctx)
+	secured.POST("", kycMiddleware, c.handlePlaceOrder)
+	c.subscribeToEventsV1()
 }
 
-func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch events.DataChannel) {
+func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch contract.DataChannel) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -194,19 +226,21 @@ func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch events.DataChan
 			}
 			_, ok = ev.Data.(matching.OrderMatched)
 			if !ok {
+				c.logger.Warn("invalid event data", "event", matching.EventKeyOrderMatched)
 				continue
 			}
+
 			// TODO: use the event to create executions. Maybe enrich the event args with more information.
 		}
 	}
 }
 
-func (c *Orders) subscribeToEventsV1(ctx context.Context) {
+func (c *Orders) subscribeToEventsV1() {
 	matchFound := c.eb.Subscribe(matching.EventKeyOrderMatched)
-	go c.handleOnMatchFoundEvent(ctx, matchFound)
+	go c.handleOnMatchFoundEvent(c.eb.Context(), matchFound)
 }
 
-func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdGeneratorFunc, e *matching.MatchingEngine, eb events.EventBus) *Orders {
+func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdGeneratorFunc, e *matching.Engine, eb contract.EventBus, cc contract.CurrencyConverter) *Orders {
 	return &Orders{
 		repo:           q,
 		logger:         l.With("controller", "orders"),
@@ -215,5 +249,6 @@ func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p
 		idGenerator:    idg,
 		matchingEngine: e,
 		eb:             eb,
+		cc:             cc,
 	}
 }
