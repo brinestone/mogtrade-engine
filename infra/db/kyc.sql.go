@@ -45,18 +45,41 @@ func (q *Queries) CreateKycRecord(ctx context.Context, arg CreateKycRecordParams
 
 const getKycRecordByUser = `-- name: GetKycRecordByUser :one
 select
-    id, user_id, status, risk_profile, verified_at, valid_window, identity_doc, proof_of_address, created_at, updated_at, verified_by, rejection_reason
+    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason,
+    (k.created_at + k.valid_window)::timestamptz as expires_at,
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable
 from
-    kyc_records
+    kyc_records k
 where
-    user_id = $1
+    k.user_id = $1
 limit
     1
 `
 
-func (q *Queries) GetKycRecordByUser(ctx context.Context, userID *string) (KycRecord, error) {
+type GetKycRecordByUserRow struct {
+	ID              string
+	UserID          *string
+	Status          KycStatus
+	RiskProfile     KycRiskProfile
+	VerifiedAt      pgtype.Timestamptz
+	ValidWindow     string
+	IdentityDoc     []byte
+	ProofOfAddress  []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	VerifiedBy      *string
+	RejectionReason *string
+	ExpiresAt       pgtype.Timestamptz
+	Usable          bool
+}
+
+func (q *Queries) GetKycRecordByUser(ctx context.Context, userID *string) (GetKycRecordByUserRow, error) {
 	row := q.db.QueryRow(ctx, getKycRecordByUser, userID)
-	var i KycRecord
+	var i GetKycRecordByUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -70,6 +93,8 @@ func (q *Queries) GetKycRecordByUser(ctx context.Context, userID *string) (KycRe
 		&i.UpdatedAt,
 		&i.VerifiedBy,
 		&i.RejectionReason,
+		&i.ExpiresAt,
+		&i.Usable,
 	)
 	return i, err
 }
@@ -77,10 +102,16 @@ func (q *Queries) GetKycRecordByUser(ctx context.Context, userID *string) (KycRe
 const listKycs = `-- name: ListKycs :many
 select
     k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason,
-    (k.created_at + k.valid_window) <= now()
-    or k.status not in ('rejected', 'expired')::boolean as usable
+    (k.created_at + k.valid_window)::timestamptz as expires_at,
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable
 from
     kyc_records k
+order by
+    created_at desc
 `
 
 type ListKycsRow struct {
@@ -96,7 +127,8 @@ type ListKycsRow struct {
 	UpdatedAt       pgtype.Timestamptz
 	VerifiedBy      *string
 	RejectionReason *string
-	Usable          *bool
+	ExpiresAt       pgtype.Timestamptz
+	Usable          bool
 }
 
 func (q *Queries) ListKycs(ctx context.Context) ([]ListKycsRow, error) {
@@ -121,6 +153,7 @@ func (q *Queries) ListKycs(ctx context.Context) ([]ListKycsRow, error) {
 			&i.UpdatedAt,
 			&i.VerifiedBy,
 			&i.RejectionReason,
+			&i.ExpiresAt,
 			&i.Usable,
 		); err != nil {
 			return nil, err
@@ -137,14 +170,17 @@ const listKycsByRiskProfile = `-- name: ListKycsByRiskProfile :many
 select
     k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason,
     (k.created_at + k.valid_window)::timestamptz as expires_at,
-    (k.created_at + k.valid_window) <= now()
-    or k.status not in ('rejected', 'expired')::boolean as usable
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable
 from
     kyc_records k
 where
     k.risk_profile = $1
 order by
-    verified_at desc
+    verified_at desc nulls last
 `
 
 type ListKycsByRiskProfileRow struct {
@@ -161,7 +197,7 @@ type ListKycsByRiskProfileRow struct {
 	VerifiedBy      *string
 	RejectionReason *string
 	ExpiresAt       pgtype.Timestamptz
-	Usable          *bool
+	Usable          bool
 }
 
 func (q *Queries) ListKycsByRiskProfile(ctx context.Context, riskProfile KycRiskProfile) ([]ListKycsByRiskProfileRow, error) {
@@ -199,6 +235,44 @@ func (q *Queries) ListKycsByRiskProfile(ctx context.Context, riskProfile KycRisk
 	return items, nil
 }
 
+const markKycVerifying = `-- name: MarkKycVerifying :exec
+update kyc_records
+set
+    updated_at = now(),
+    status = 'verifying'
+where
+    user_id = $1
+    and status in ('pending', 'rejected', 'expired')
+`
+
+func (q *Queries) MarkKycVerifying(ctx context.Context, userID *string) error {
+	_, err := q.db.Exec(ctx, markKycVerifying, userID)
+	return err
+}
+
+const rejectKyc = `-- name: RejectKyc :exec
+update kyc_records
+set
+    updated_at = now(),
+    status = 'rejected',
+    verified_by = $2,
+    rejection_reason = $3,
+    verified_at = null
+where
+    user_id = $1
+`
+
+type RejectKycParams struct {
+	UserID          *string
+	VerifiedBy      *string
+	RejectionReason *string
+}
+
+func (q *Queries) RejectKyc(ctx context.Context, arg RejectKycParams) error {
+	_, err := q.db.Exec(ctx, rejectKyc, arg.UserID, arg.VerifiedBy, arg.RejectionReason)
+	return err
+}
+
 const setKycStatus = `-- name: SetKycStatus :exec
 update kyc_records
 set
@@ -222,18 +296,47 @@ const updateKycDocuments = `-- name: UpdateKycDocuments :exec
 update kyc_records
 set
     updated_at = now(),
-    identity_doc = $1,
-    proof_of_address = $2
+    identity_doc = $2,
+    proof_of_address = $3,
+    status = 'pending',
+    rejection_reason = null,
+    verified_at = null,
+    verified_by = null
 where
     user_id = $1
 `
 
 type UpdateKycDocumentsParams struct {
+	UserID         *string
 	IdentityDoc    []byte
 	ProofOfAddress []byte
 }
 
 func (q *Queries) UpdateKycDocuments(ctx context.Context, arg UpdateKycDocumentsParams) error {
-	_, err := q.db.Exec(ctx, updateKycDocuments, arg.IdentityDoc, arg.ProofOfAddress)
+	_, err := q.db.Exec(ctx, updateKycDocuments, arg.UserID, arg.IdentityDoc, arg.ProofOfAddress)
+	return err
+}
+
+const verifyKyc = `-- name: VerifyKyc :exec
+update kyc_records
+set
+    updated_at = now(),
+    status = 'verified',
+    verified_at = now(),
+    verified_by = $2,
+    rejection_reason = null,
+    risk_profile = $3
+where
+    user_id = $1
+`
+
+type VerifyKycParams struct {
+	UserID      *string
+	VerifiedBy  *string
+	RiskProfile KycRiskProfile
+}
+
+func (q *Queries) VerifyKyc(ctx context.Context, arg VerifyKycParams) error {
+	_, err := q.db.Exec(ctx, verifyKyc, arg.UserID, arg.VerifiedBy, arg.RiskProfile)
 	return err
 }

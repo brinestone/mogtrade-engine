@@ -420,21 +420,6 @@ type Account struct {
 	UpdatedAt             pgtype.Timestamp
 }
 
-type KycRecord struct {
-	ID              string
-	UserID          *string
-	Status          KycStatus
-	RiskProfile     KycRiskProfile
-	VerifiedAt      pgtype.Timestamptz
-	ValidWindow     string
-	IdentityDoc     []byte
-	ProofOfAddress  []byte
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	VerifiedBy      *string
-	RejectionReason *string
-}
-
 type Order struct {
 	UserID           *string
 	Symbol           string

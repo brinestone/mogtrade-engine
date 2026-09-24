@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"database/sql"
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/kyc"
 )
 
 type TokenEncoder interface {
@@ -85,7 +87,11 @@ func RotateAccessToken(ctx context.Context, q *db.Queries, idg contract.IdGenera
 		return SignInResult{}, err
 	}
 
-	newAccessToken, newRefresh, err := generateAuthTokenPairs(user, te)
+	k, err := kyc.GetByUser(ctx, q, user.ID)
+	if err != nil {
+		return SignInResult{}, err
+	}
+	newAccessToken, newRefresh, err := generateAuthTokenPairs(user, k.Status, te)
 	if err != nil {
 		return SignInResult{}, err
 	}
@@ -158,7 +164,11 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder
 	}
 
 	user, _ := q.FindUserById(ctx, account.UserID)
-	accessToken, refreshToken, err := generateAuthTokenPairs(user, te)
+	k, err := kyc.GetByUser(ctx, q, user.ID)
+	if err != nil {
+		return SignInResult{}, err
+	}
+	accessToken, refreshToken, err := generateAuthTokenPairs(user, k.Status, te)
 	if err != nil {
 		return SignInResult{}, err
 	}
@@ -177,8 +187,12 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te TokenEncoder
 	return SignInResult{AccessToken: accessToken, RefreshToken: refreshToken}, nil
 }
 
-func generateAuthTokenPairs(u db.User, te TokenEncoder) (string, string, error) {
-	accessToken, err := te.EncodeWithClaims(getUserClaims(&u), u.ID)
+func generateAuthTokenPairs(u db.User, kycStatus contract.KYCStatus, te TokenEncoder) (string, string, error) {
+	claims := getUserClaims(&u)
+	maps.Copy(claims, map[string]any{
+		"kyc_status": kycStatus,
+	})
+	accessToken, err := te.EncodeWithClaims(claims, u.ID)
 	if err != nil {
 		return "", "", err
 	}

@@ -4,8 +4,10 @@ package contract
 type KYCStatus string
 
 const (
-	// KYCPending indicates the KYC verification is in progress.
+	// KYCPending indicates documents have been submitted and await review.
 	KYCPending KYCStatus = "pending"
+	// KYCVerifying indicates an admin review is in progress.
+	KYCVerifying KYCStatus = "verifying"
 	// KYCVerified indicates the KYC has been successfully verified.
 	KYCVerified KYCStatus = "verified"
 	// KYCRejected indicates the KYC verification was rejected.
@@ -26,6 +28,22 @@ const (
 	KYCRiskHigh KYCRiskProfile = "high"
 )
 
+// IdentityDocument stores hashes and a URI for ID document assets.
+// JSON keys match the kyc_records.identity_doc column shape.
+type IdentityDocument struct {
+	FrontHash  string `json:"front_hash"`
+	BackHash   string `json:"back_hash"`
+	SelfieHash string `json:"selfie_hash"`
+	URI        string `json:"uri"`
+}
+
+// ProofOfAddressDocument stores a hash and URI for proof-of-address assets.
+// JSON keys match the kyc_records.proof_of_address column shape.
+type ProofOfAddressDocument struct {
+	DocHash string `json:"doc_hash"`
+	URI     string `json:"uri"`
+}
+
 // KYCRecord contains the KYC verification data for a user.
 type KYCRecord struct {
 	ID              string
@@ -34,17 +52,11 @@ type KYCRecord struct {
 	RiskProfile     KYCRiskProfile
 	VerifiedAt      *string // ISO 8601 or nil
 	ExpiresAt       *string // ISO 8601 or nil
-	IdentityDoc     DocumentRef
-	ProofOfAddress  DocumentRef
+	Usable          bool
+	IdentityDoc     IdentityDocument
+	ProofOfAddress  ProofOfAddressDocument
 	CreatedAt       string
 	UpdatedAt       string
 	VerifiedBy      string // admin user ID who performed verification
-	RejectionReason string // if status != verified
-}
-
-// DocumentRef represents a reference to a document stored in object storage.
-type DocumentRef struct {
-	URI        string // URI/URL where the document is stored
-	SHA256     string // SHA256 hash for integrity verification
-	UploadedAt string // when the document was uploaded (ISO 8601)
+	RejectionReason string // if status == rejected
 }
