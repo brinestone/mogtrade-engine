@@ -96,6 +96,94 @@ func (ns NullExecutionStatus) Value() (driver.Value, error) {
 	return string(ns.ExecutionStatus), nil
 }
 
+type KycRiskProfile string
+
+const (
+	KycRiskProfileLow    KycRiskProfile = "low"
+	KycRiskProfileMedium KycRiskProfile = "medium"
+	KycRiskProfileHigh   KycRiskProfile = "high"
+)
+
+func (e *KycRiskProfile) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = KycRiskProfile(s)
+	case string:
+		*e = KycRiskProfile(s)
+	default:
+		return fmt.Errorf("unsupported scan type for KycRiskProfile: %T", src)
+	}
+	return nil
+}
+
+type NullKycRiskProfile struct {
+	KycRiskProfile KycRiskProfile
+	Valid          bool // Valid is true if KycRiskProfile is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullKycRiskProfile) Scan(value interface{}) error {
+	if value == nil {
+		ns.KycRiskProfile, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.KycRiskProfile.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullKycRiskProfile) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.KycRiskProfile), nil
+}
+
+type KycStatus string
+
+const (
+	KycStatusPending   KycStatus = "pending"
+	KycStatusRejected  KycStatus = "rejected"
+	KycStatusVerified  KycStatus = "verified"
+	KycStatusExpired   KycStatus = "expired"
+	KycStatusVerifying KycStatus = "verifying"
+)
+
+func (e *KycStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = KycStatus(s)
+	case string:
+		*e = KycStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for KycStatus: %T", src)
+	}
+	return nil
+}
+
+type NullKycStatus struct {
+	KycStatus KycStatus
+	Valid     bool // Valid is true if KycStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullKycStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.KycStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.KycStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullKycStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.KycStatus), nil
+}
+
 type OrderSide string
 
 const (
@@ -330,6 +418,21 @@ type Account struct {
 	Password              *string
 	CreatedAt             pgtype.Timestamp
 	UpdatedAt             pgtype.Timestamp
+}
+
+type KycRecord struct {
+	ID              string
+	UserID          *string
+	Status          KycStatus
+	RiskProfile     KycRiskProfile
+	VerifiedAt      pgtype.Timestamptz
+	ValidWindow     string
+	IdentityDoc     []byte
+	ProofOfAddress  []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	VerifiedBy      *string
+	RejectionReason *string
 }
 
 type Order struct {
