@@ -37,6 +37,5 @@ func main() {
 	if err := api.MountApiV1(ctx, baseRouter); err != nil {
 		panic(err)
 	}
-	startAsyncTasks(ctx)
 	engine.Run(fmt.Sprintf(":%d", port))
 }

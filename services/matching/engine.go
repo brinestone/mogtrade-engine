@@ -1,7 +1,9 @@
 package matching
 
 import (
+	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -18,7 +20,7 @@ type Engine struct {
 	logger      *slog.Logger
 	orderBookMu sync.Mutex
 	orderBook   map[string]*OrderBook
-	eb          contract.EventBus
+	bus         contract.EventBus
 }
 
 type PlaceMatchOrderParams struct {
@@ -30,10 +32,12 @@ type PlaceMatchOrderParams struct {
 }
 
 type OrderMatched struct {
-	BuyOrder  string
-	SellOrder string
-	Symbol    string
-	MatchedAt time.Time
+	BuyOrder          string
+	SellOrder         string
+	Symbol            string
+	MatchedAt         time.Time
+	MatchQuantity     decimal.Decimal
+	RemainingQuantity decimal.Decimal
 }
 
 func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
@@ -58,7 +62,8 @@ func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
 
 	// start matching without holding the outer map mutex
 	e.logger.Info("finding matches", "symbol", p.Symbol)
-	go e.findMatches(p.Symbol)
+	// go e.findMatches(p.Symbol)
+	go e.findMatches2(p.Symbol)
 }
 
 // findMatches attempts to match as much as possible against the opposite side
@@ -68,7 +73,11 @@ func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
 func (e *Engine) findMatches(symbol string) {
 	// 1. Acquire outer map mutex just long enough to fetch the *OrderBook.
 	e.logger.Info("findMatches: acquiring outer map mutex", "symbol", symbol)
-	e.orderBookMu.Lock()
+	hasMutex := e.orderBookMu.TryLock()
+	if !hasMutex {
+		e.logger.Info("findMatches: book mutex is busy. aborting", "symbol", symbol)
+		return
+	}
 	book, ok := e.orderBook[symbol]
 	if !ok {
 		e.logger.Info("findMatches: no order book for symbol", "symbol", symbol)
@@ -212,7 +221,7 @@ func (e *Engine) findMatches(symbol string) {
 			Symbol:    symbol,
 			MatchedAt: time.Now(),
 		}
-		e.eb.Publish(EventKeyOrderMatched, ev)
+		e.bus.Publish(EventKeyOrderMatched, ev)
 	}
 
 	// 8. Release the outer map mutex.
@@ -220,11 +229,149 @@ func (e *Engine) findMatches(symbol string) {
 	e.orderBookMu.Unlock()
 }
 
+func (e *Engine) findMatches2(symbol string) {
+	l := e.logger.With("symbol", symbol)
+	hasMutex := e.orderBookMu.TryLock()
+	if !hasMutex {
+		l.Info("book mutex is busy, aborting")
+		return
+	}
+	book, found := e.orderBook[symbol]
+	if !found {
+		l.Info("no order book found")
+		e.orderBookMu.Unlock()
+		return
+	}
+	l.Info("obtained order book")
+
+	l.Info("acquiring internal mutexes")
+	book.sellMu.Lock()
+	book.buyMu.Lock()
+	defer book.buyMu.Unlock()
+	defer book.sellMu.Unlock()
+
+	markedForRemoval := make([]int, 0)
+	for i, price := range *book.bidPrices {
+		levelKey := price.String()
+		bidLevel, found := book.bids[levelKey]
+		if !found {
+			l.Warn("bid price was found in bid price list but it has no price level. Marking for removing from price list", "bid-price", price)
+			markedForRemoval = append(markedForRemoval, i)
+			continue
+		}
+
+		l.Info("finding ask matches for bid", "bid-price", price)
+		for eIdx := bidLevel.Orders.Front(); eIdx != nil; {
+			markedForRemoval := make([]int, 0)
+			bidEntry := eIdx.Value.(OrderEntry)
+			for i, askPrice := range *book.sellPrices {
+				if askPrice.GreaterThan(price) {
+					l.Warn("there are no more asks for bids")
+					break
+				}
+				askKey := askPrice.String()
+				askLevel, found := book.asks[askKey]
+				if !found {
+					l.Warn("ask price was in sell price list but it has no price level. Marking for removing from price list", "ask-price", askPrice)
+					markedForRemoval = append(markedForRemoval, i)
+					continue
+				}
+
+				matchQty := decimal.Min(bidEntry.Quantity, askLevel.TotalVolume)
+				for askOrderItem := askLevel.Orders.Front(); askOrderItem != nil && !matchQty.IsZero(); {
+					askEntry := askOrderItem.Value.(OrderEntry)
+					execQty := decimal.Min(matchQty, askEntry.Quantity)
+					askEntry.Quantity = askEntry.Quantity.Sub(execQty)
+					bidEntry.Quantity = bidEntry.Quantity.Sub(execQty)
+					matchQty = matchQty.Sub(execQty)
+					askLevel.TotalVolume = askLevel.TotalVolume.Sub(execQty)
+					bidLevel.TotalVolume = bidLevel.TotalVolume.Sub(execQty)
+					askOrderItem.Value = askEntry
+					e.bus.Publish(EventKeyOrderMatched, OrderMatched{
+						BuyOrder:          bidEntry.OrderId,
+						SellOrder:         askEntry.OrderId,
+						Symbol:            symbol,
+						MatchedAt:         time.Now(),
+						MatchQuantity:     execQty,
+						RemainingQuantity: askEntry.Quantity.Sub(execQty),
+					})
+					if bidLevel.TotalVolume.IsZero() || bidEntry.Quantity.IsZero() {
+						break
+					}
+					if askEntry.Quantity.IsZero() {
+						next := askOrderItem.Next()
+						askLevel.Orders.Remove(askOrderItem)
+						askOrderItem = next
+						continue
+					}
+					askOrderItem = askOrderItem.Next()
+				}
+				if len(markedForRemoval) > 0 {
+					newAskPriceList := make(sellPriceList, len(*book.sellPrices)-len(markedForRemoval))
+					for i, p := range *book.sellPrices {
+						if slices.Contains(markedForRemoval, i) {
+							continue
+						}
+						(&newAskPriceList).Push(p)
+					}
+					book.sellPrices = &newAskPriceList
+				}
+
+				if bidLevel.TotalVolume.IsZero() || bidEntry.Quantity.IsZero() {
+					break
+				}
+			}
+			if bidEntry.Quantity.IsZero() {
+				next := eIdx.Next()
+				bidLevel.Orders.Remove(eIdx)
+				eIdx = next
+				continue
+			}
+			eIdx = eIdx.Next()
+		}
+	}
+	if len(markedForRemoval) > 0 {
+		newBidPriceList := make(buyPriceList, len(*book.bidPrices)-len(markedForRemoval))
+		for i, p := range *book.bidPrices {
+			if slices.Contains(markedForRemoval, i) {
+				continue
+			}
+			(&newBidPriceList).Push(p)
+		}
+		book.bidPrices = &newBidPriceList
+	}
+}
+func (e *Engine) StartAutoMatching(ctx context.Context) {
+	t := time.NewTicker(time.Second)
+	go func(t *time.Ticker) {
+		e.logger.Debug("starting auto matching")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if len(e.orderBook) <= 0 {
+					continue
+				}
+				hasMutex := e.orderBookMu.TryLock()
+				if !hasMutex {
+					e.logger.Warn("book mutex is busy, skipping auto matching")
+					continue
+				}
+				for symbol := range e.orderBook {
+					e.findMatches(symbol)
+				}
+				e.orderBookMu.Unlock()
+			}
+		}
+	}(t)
+}
+
 func NewMatchingEngine(l *slog.Logger, eb contract.EventBus) *Engine {
 	return &Engine{
 		logger:      l.With("service", "matching-engine"),
 		orderBookMu: sync.Mutex{},
 		orderBook:   make(map[string]*OrderBook),
-		eb:          eb,
+		bus:         eb,
 	}
 }

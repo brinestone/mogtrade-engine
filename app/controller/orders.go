@@ -77,7 +77,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 	if err != nil {
 		if errors.Is(err, billing.ErrWalletNotFound) {
 			o.logger.Warn("wallet not found", "uid", helpers.GetCurrentUserId(ctx), "wallet-type", payload.WalletType)
-			helpers.InternalServerError(ctx)
+			ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
 		o.logger.Error("could not retrieve wallet info", "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx), "err", err.Error())
@@ -148,7 +148,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			return err
 		}
 
-		o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
+		go o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
 			OrderId:  orderId,
 			Symbol:   payload.Symbol,
 			Type:     db.OrderSide(payload.Side),
@@ -160,16 +160,16 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, orders.ErrDuplicateOrder) {
-			ctx.AbortWithStatus(http.StatusConflict)
+			ctx.AbortWithStatus(http.StatusAccepted)
 			return
 		}
 		o.logger.Error("could not create order", "err", err.Error())
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+		helpers.InternalServerError(ctx)
 		return
 	}
 	tx.Commit(ctx.Request.Context())
 
-	ctx.Status(http.StatusCreated)
+	ctx.Status(http.StatusAccepted)
 	o.eb.Publish(EventKeyOrderCreatedV1, eventpayloads.OrderPlaced{
 		OrderId:   orderId,
 		Timestamp: time.Now(),
@@ -224,13 +224,65 @@ func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch contract.DataCh
 			if !ok {
 				continue
 			}
-			_, ok = ev.Data.(matching.OrderMatched)
+			event, ok := ev.Data.(matching.OrderMatched)
 			if !ok {
 				c.logger.Warn("invalid event data", "event", matching.EventKeyOrderMatched)
 				continue
 			}
 
-			// TODO: use the event to create executions. Maybe enrich the event args with more information.
+			c.logger.Info("order match found, creating execution", "buy", event.BuyOrder, "sell", event.SellOrder)
+			tx, err := c.pool.Begin(ctx)
+			if err != nil {
+				c.logger.Error("could not open database transaction", "err", err.Error())
+				return
+			}
+
+			buyOrder, err := c.repo.FindOrderById(ctx, event.BuyOrder)
+			if err != nil {
+				c.logger.Error("could not find buy order", "err", err.Error(), "buy-order", event.BuyOrder, "sell-order", event.SellOrder)
+				tx.Rollback(ctx)
+				continue
+			}
+			sellOrder, err := c.repo.FindOrderById(ctx, event.SellOrder)
+			if err != nil {
+				c.logger.Error("could not find sell order", "err", err.Error(), "sell-order", event.SellOrder, "buy-order", event.BuyOrder)
+				tx.Rollback(ctx)
+				continue
+			}
+
+			tracingId := c.idGenerator()
+			err = orders.CreateExecution(ctx, c.repo.WithTx(tx), orders.CreateExecutionParams{
+				OrderId:     event.BuyOrder,
+				Id:          c.idGenerator(),
+				TracingId:   tracingId,
+				Quantity:    buyOrder.Quantity,
+				FeeCurrency: buyOrder.Currency,
+				FeeRate:     buyOrder.ExchangeRate,
+				FeeAmount:   buyOrder.Fee,
+				Price:       buyOrder.LimitPrice.Decimal,
+			})
+			if err != nil {
+				c.logger.Error("could not create buy execution", "err", err.Error())
+				tx.Rollback(ctx)
+				continue
+			}
+
+			err = orders.CreateExecution(ctx, c.repo.WithTx(tx), orders.CreateExecutionParams{
+				OrderId:     event.SellOrder,
+				Id:          c.idGenerator(),
+				FeeCurrency: sellOrder.Currency,
+				TracingId:   tracingId,
+				FeeRate:     sellOrder.ExchangeRate,
+				FeeAmount:   sellOrder.Fee,
+				Price:       sellOrder.LimitPrice.Decimal,
+				Quantity:    sellOrder.Quantity,
+			})
+			if err != nil {
+				c.logger.Error("could not create sell execution", "order", sellOrder.ID, "err", err.Error())
+				tx.Rollback(ctx)
+				continue
+			}
+			tx.Commit(ctx)
 		}
 	}
 }

@@ -278,6 +278,12 @@ func startAsyncTasks(ctx context.Context) {
 	if err != nil {
 		panic(err)
 	}
+	engine, err := ioc.Get[*matching.Engine](ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	(*engine).StartAutoMatching(ctx)
 	performSeeding(ctx, *pool, *l, *idg)
 	startJobScheduler(ctx)
 	go pullMarketFeed(ctx)

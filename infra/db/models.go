@@ -421,21 +421,22 @@ type Account struct {
 }
 
 type Order struct {
-	UserID           *string
-	Symbol           string
-	Side             OrderSide
-	OrderType        OrderType
-	Quantity         decimal.Decimal
-	LimitPrice       decimal.NullDecimal
-	StopPrice        decimal.NullDecimal
-	ID               string
-	ClientOrderID    *string
-	Status           *OrderStatus
-	FilledQuantity   decimal.NullDecimal
-	AverageFillPrice decimal.NullDecimal
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	TracingID        string
+	UserID        *string
+	Symbol        string
+	Side          OrderSide
+	OrderType     OrderType
+	Quantity      decimal.Decimal
+	LimitPrice    decimal.NullDecimal
+	StopPrice     decimal.NullDecimal
+	ID            string
+	ClientOrderID *string
+	Status        *OrderStatus
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	TracingID     string
+	Fee           decimal.Decimal
+	Currency      string
+	ExchangeRate  decimal.Decimal
 }
 
 type User struct {

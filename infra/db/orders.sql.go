@@ -11,32 +11,6 @@ import (
 	decimal "github.com/shopspring/decimal"
 )
 
-const applyOrderFill = `-- name: ApplyOrderFill :exec
-UPDATE orders
-SET
-    filled_quantity = filled_quantity + $1,
-    status = (
-        CASE
-            WHEN filled_quantity + $1 >= quantity THEN 'filled'
-            ELSE 'partially_filled'
-        END
-    )::order_status,
-    updated_at = now()
-WHERE
-    id = $2
-    AND status IN ('submitted', 'partially_filled')
-`
-
-type ApplyOrderFillParams struct {
-	FilledQuantity decimal.NullDecimal
-	ID             string
-}
-
-func (q *Queries) ApplyOrderFill(ctx context.Context, arg ApplyOrderFillParams) error {
-	_, err := q.db.Exec(ctx, applyOrderFill, arg.FilledQuantity, arg.ID)
-	return err
-}
-
 const createExecution = `-- name: CreateExecution :exec
 insert into
     executions (
@@ -113,7 +87,7 @@ func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams
 
 const findOrderById = `-- name: FindOrderById :one
 select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, filled_quantity, average_fill_price, created_at, updated_at, tracing_id
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
 from
     orders
 where
@@ -134,18 +108,19 @@ func (q *Queries) FindOrderById(ctx context.Context, id string) (Order, error) {
 		&i.ID,
 		&i.ClientOrderID,
 		&i.Status,
-		&i.FilledQuantity,
-		&i.AverageFillPrice,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TracingID,
+		&i.Fee,
+		&i.Currency,
+		&i.ExchangeRate,
 	)
 	return i, err
 }
 
 const getOrders = `-- name: GetOrders :many
 select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, filled_quantity, average_fill_price, created_at, updated_at, tracing_id
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
 from
     orders
 where
@@ -181,11 +156,12 @@ func (q *Queries) GetOrders(ctx context.Context, arg GetOrdersParams) ([]Order, 
 			&i.ID,
 			&i.ClientOrderID,
 			&i.Status,
-			&i.FilledQuantity,
-			&i.AverageFillPrice,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TracingID,
+			&i.Fee,
+			&i.Currency,
+			&i.ExchangeRate,
 		); err != nil {
 			return nil, err
 		}
@@ -227,24 +203,22 @@ INSERT INTO
         quantity,
         limit_price,
         stop_price,
-        client_order_id,
-        average_fill_price
+        client_order_id
     )
 VALUES
-    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type PlaceOrderParams struct {
-	ID               string
-	UserID           *string
-	Symbol           string
-	Side             OrderSide
-	OrderType        OrderType
-	Quantity         decimal.Decimal
-	LimitPrice       decimal.NullDecimal
-	StopPrice        decimal.NullDecimal
-	ClientOrderID    *string
-	AverageFillPrice decimal.NullDecimal
+	ID            string
+	UserID        *string
+	Symbol        string
+	Side          OrderSide
+	OrderType     OrderType
+	Quantity      decimal.Decimal
+	LimitPrice    decimal.NullDecimal
+	StopPrice     decimal.NullDecimal
+	ClientOrderID *string
 }
 
 func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) error {
@@ -258,7 +232,6 @@ func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) error {
 		arg.LimitPrice,
 		arg.StopPrice,
 		arg.ClientOrderID,
-		arg.AverageFillPrice,
 	)
 	return err
 }
