@@ -48,7 +48,7 @@ structure UnauthorizedError {
 }
 
 @pattern("^[0-9A-HJKMNP-TV-Z]{26}$")
-string ResourceId
+string Ulid
 
 @pattern("^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$")
 string EmailAddress
@@ -67,3 +67,34 @@ list ErrorMessages {
 structure NotFoundError {
     error: String
 }
+
+enum WalletType {
+    VIRTUAL = "virtual"
+    REAL = "real"
+}
+
+enum OrderStatus {
+    PENDING = "pending"
+    SUBMITTED = "submitted"
+    PARTIALLY_FILLED="partially_filled"
+    FILLED="filled"
+    CANCELLED="cancelled"
+    REJECTED="rejected"
+    EXPIRED="expired"
+}
+enum OrderSide {
+    BUY = "buy"
+    SELL = "sell"
+}
+enum OrderType {
+STOP = "stop"
+LIMIT = "limit"
+MARKET = "market"
+STOP_LIMIT = "stop_limit"
+}
+
+
+@pattern("^\\-?[0-9]+(\\.[0-9]{1,8})?$")
+string NumericString
+@pattern("^[A-Z]{3}$")
+string Currency

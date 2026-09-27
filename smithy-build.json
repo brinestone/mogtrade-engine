@@ -12,22 +12,12 @@
         ]
     },
     "projections": {
-        "auth": {
+        "api": {
             "plugins": {
                 "openapi": {
                     "protocol": "aws.protocols#restJson1",
                     "version": "3.1.0",
-                    "service": "mogtrade.auth#Auth",
-                    "tags": true
-                }
-            }
-        },
-        "economy": {
-            "plugins": {
-                "openapi": {
-                    "protocol": "aws.protocols#restJson1",
-                    "version": "3.1.0",
-                    "service": "mogtrade.economy#Economy",
+                    "service": "mogtrade.api#Api",
                     "tags": true
                 }
             }

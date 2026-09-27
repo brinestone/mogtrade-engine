@@ -1,0 +1,939 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "MogTrade API",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/api/v1/auth/email-available": {
+            "get": {
+                "description": "Check whether an email is available for a user to create an account with",
+                "operationId": "CheckEmailAvailable",
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "query",
+                        "description": "The email address query",
+                        "schema": {
+                            "type": "string",
+                            "description": "The email address query"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CheckEmailAvailable 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CheckEmailAvailableResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/api/v1/auth/login/credential": {
+            "post": {
+                "description": "Sign in users by obtaining a JWT access token and a refresh token",
+                "operationId": "CredentialSignIn",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CredentialSignInRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "parameters": [
+                    {
+                        "name": "X-D-Id",
+                        "in": "header",
+                        "description": "The client device's ID",
+                        "schema": {
+                            "type": "string",
+                            "description": "The client device's ID"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CredentialSignIn 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CredentialSignInResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "UnprocessibleError 422 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnprocessibleErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "get": {
+                "description": "Rotate access token",
+                "operationId": "RotateAccessToken",
+                "parameters": [
+                    {
+                        "name": "X-Refresh-Token",
+                        "in": "header",
+                        "description": "The refresh token from previous sign in/refresh requests",
+                        "schema": {
+                            "type": "string",
+                            "description": "The refresh token from previous sign in/refresh requests"
+                        },
+                        "required": true
+                    },
+                    {
+                        "name": "X-d-Id",
+                        "in": "header",
+                        "description": "The device id",
+                        "schema": {
+                            "type": "string",
+                            "description": "The device id"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "RotateAccessToken 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RotateAccessTokenResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/api/v1/auth/register/credential": {
+            "post": {
+                "description": "Create user account using credentials",
+                "operationId": "CredentialSignUp",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CredentialSignUpRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "CredentialSignUp 201 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "ConflictError 409 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConflictErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/api/v1/orders": {
+            "get": {
+                "operationId": "GetOrders",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "number",
+                            "default": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetOrders 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetOrdersResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Order"
+                ]
+            },
+            "post": {
+                "operationId": "PlaceOrder",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PlaceOrderRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "parameters": [
+                    {
+                        "name": "X-Idempotency-Token",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "PlaceOrder 202 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "UnprocessibleError 422 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnprocessibleErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Order"
+                ]
+            }
+        },
+        "/api/v1/orders/{id}": {
+            "get": {
+                "operationId": "FindOrder",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "FindOrder 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FindOrderResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Order"
+                ]
+            }
+        },
+        "/api/v1/wallet/{type}": {
+            "get": {
+                "operationId": "GetWalletInfo",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "schema": {
+                            "$ref": "#/components/schemas/WalletType"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetWalletInfo 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetWalletInfoResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Economy"
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "CheckEmailAvailableResponseContent": {
+                "type": "object",
+                "properties": {
+                    "available": {
+                        "type": "boolean",
+                        "description": "Whether the requested resource identifier is available or not"
+                    }
+                },
+                "required": [
+                    "available"
+                ]
+            },
+            "ConflictErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "The error message from the server"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "CredentialSignInRequestContent": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
+                        "description": "The user's identifying email address"
+                    },
+                    "password": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 6,
+                        "description": "The user's password",
+                        "format": "password"
+                    }
+                },
+                "required": [
+                    "email",
+                    "password"
+                ]
+            },
+            "CredentialSignInResponseContent": {
+                "type": "object",
+                "properties": {
+                    "accessToken": {
+                        "type": "string",
+                        "description": "The  access token (JWT) granted to the user"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "The refresh token"
+                    }
+                },
+                "required": [
+                    "accessToken",
+                    "refreshToken"
+                ]
+            },
+            "CredentialSignUpRequestContent": {
+                "type": "object",
+                "properties": {
+                    "names": {
+                        "type": "string",
+                        "description": "The names of the user"
+                    },
+                    "email": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
+                        "description": "The email address of the user. NOTE: must be unique"
+                    },
+                    "password": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 6,
+                        "description": "User's password",
+                        "format": "password"
+                    },
+                    "confirmPassword": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 6,
+                        "description": "Password confirmation",
+                        "format": "password"
+                    }
+                },
+                "required": [
+                    "confirmPassword",
+                    "email",
+                    "names",
+                    "password"
+                ]
+            },
+            "FindOrderResponseContent": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "$ref": "#/components/schemas/OrderSide"
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/OrderType"
+                    },
+                    "qty": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "limitPrice": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "stopPrice": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/OrderStatus"
+                    },
+                    "createdAt": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "updatedAt": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                },
+                "required": [
+                    "createdAt",
+                    "currency",
+                    "id",
+                    "qty",
+                    "side",
+                    "status",
+                    "symbol",
+                    "type",
+                    "updatedAt"
+                ]
+            },
+            "GetOrdersResponseContent": {
+                "type": "object",
+                "properties": {
+                    "nextCursor": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OrderLookup"
+                        }
+                    }
+                },
+                "required": [
+                    "data"
+                ]
+            },
+            "GetWalletInfoResponseContent": {
+                "type": "object",
+                "properties": {
+                    "balance": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "walletId": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "totalTransactions": {
+                        "type": "number"
+                    },
+                    "lastActivityAt": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                },
+                "required": [
+                    "balance",
+                    "totalTransactions",
+                    "walletId"
+                ]
+            },
+            "InternalServerErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "The error message from the server"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "NotFoundErrorResponseContent": {
+                "type": "object",
+                "description": "A resource was not found",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                }
+            },
+            "OrderLookup": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "$ref": "#/components/schemas/OrderSide"
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/OrderType"
+                    },
+                    "qty": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "limitPrice": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "stopPrice": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/OrderStatus"
+                    },
+                    "createdAt": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "updatedAt": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                },
+                "required": [
+                    "createdAt",
+                    "currency",
+                    "id",
+                    "qty",
+                    "side",
+                    "status",
+                    "symbol",
+                    "type",
+                    "updatedAt"
+                ]
+            },
+            "OrderSide": {
+                "type": "string",
+                "enum": [
+                    "buy",
+                    "sell"
+                ]
+            },
+            "OrderStatus": {
+                "type": "string",
+                "enum": [
+                    "pending",
+                    "submitted",
+                    "partially_filled",
+                    "filled",
+                    "cancelled",
+                    "rejected",
+                    "expired"
+                ]
+            },
+            "OrderType": {
+                "type": "string",
+                "enum": [
+                    "stop",
+                    "limit",
+                    "market",
+                    "stop_limit"
+                ]
+            },
+            "PlaceOrderRequestContent": {
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "$ref": "#/components/schemas/OrderSide"
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/OrderType"
+                    },
+                    "qty": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "limitPrice": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "stopPrice": {
+                        "type": "string",
+                        "pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/OrderStatus"
+                    },
+                    "walletType": {
+                        "$ref": "#/components/schemas/WalletType"
+                    }
+                },
+                "required": [
+                    "currency",
+                    "qty",
+                    "side",
+                    "status",
+                    "symbol",
+                    "type",
+                    "walletType"
+                ]
+            },
+            "RotateAccessTokenResponseContent": {
+                "type": "object",
+                "properties": {
+                    "accessToken": {
+                        "type": "string",
+                        "description": "The  access token (JWT) granted to the user"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "The refresh token"
+                    }
+                },
+                "required": [
+                    "accessToken",
+                    "refreshToken"
+                ]
+            },
+            "UnauthorizedErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "UnprocessibleErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "A list of validation messages"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "ValidationErrorResponseContent": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "A list of validation messages"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "WalletType": {
+                "type": "string",
+                "enum": [
+                    "virtual",
+                    "real"
+                ]
+            }
+        },
+        "securitySchemes": {
+            "smithy.api.httpBearerAuth": {
+                "type": "http",
+                "description": "HTTP Bearer authentication",
+                "scheme": "Bearer"
+            }
+        }
+    },
+    "security": [
+        {
+            "smithy.api.httpBearerAuth": []
+        }
+    ]
+}

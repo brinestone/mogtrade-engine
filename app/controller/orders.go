@@ -160,7 +160,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, orders.ErrDuplicateOrder) {
-			ctx.AbortWithStatus(http.StatusAccepted)
+			ctx.Status(http.StatusAccepted)
 			return
 		}
 		o.logger.Error("could not create order", "err", err.Error())
@@ -175,7 +175,6 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		Timestamp: time.Now(),
 	})
 }
-
 func (o *Orders) handleFindOrders(ctx *gin.Context) {
 	cursor := ctx.Query("cursor")
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "100"))
