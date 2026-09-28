@@ -31,7 +31,7 @@ func RequireAuth(l *slog.Logger, v contract.TokenVerifier) gin.HandlerFunc {
 		valid, err := v.VerifyToken(token, func(id string) {
 			c.Set("uid", id)
 		})
-		v.VerifyWithClaims(token, func(claims map[string]any) {
+		v.VerifyWithClaims(token, func(claims contract.BearerClaims) {
 			c.Set("claims", claims)
 		})
 		if err != nil {

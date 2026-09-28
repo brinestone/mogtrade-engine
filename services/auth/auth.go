@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"database/sql"
@@ -80,15 +79,17 @@ func RotateAccessToken(ctx context.Context, q *db.Queries, te contract.TokenEnco
 		return SignInResult{}, err
 	}
 
-	k, err := kyc.GetByUser(ctx, q, user.ID)
+	var kycStatus contract.KYCStatus = contract.KYCPending
+	if k, err := kyc.GetByUser(ctx, q, user.ID); err == nil {
+		kycStatus = k.Status
+	} else if !errors.Is(err, kyc.ErrKycNotFound) {
+		return SignInResult{}, err
+	}
+	newAccessToken, newRefresh, err := generateAuthTokenPairs(user, kycStatus, te)
 	if err != nil {
 		return SignInResult{}, err
 	}
-	newAccessToken, newRefresh, err := generateAuthTokenPairs(user, k.Status, te)
-	if err != nil {
-		return SignInResult{}, err
-	}
-
+	println(kycStatus)
 	q.InvalidateRefreshTokensForDevice(ctx, r.DeviceId)
 	err = q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		ID:          r.RefreshTokenId,
@@ -157,11 +158,13 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te contract.Tok
 	}
 
 	user, _ := q.FindUserById(ctx, account.UserID)
-	k, err := kyc.GetByUser(ctx, q, user.ID)
-	if err != nil {
+	var kycStatus contract.KYCStatus = contract.KYCPending
+	if k, err := kyc.GetByUser(ctx, q, user.ID); err == nil {
+		kycStatus = k.Status
+	} else if !errors.Is(err, kyc.ErrKycNotFound) {
 		return SignInResult{}, err
 	}
-	accessToken, refreshToken, err := generateAuthTokenPairs(user, k.Status, te)
+	accessToken, refreshToken, err := generateAuthTokenPairs(user, kycStatus, te)
 	if err != nil {
 		return SignInResult{}, err
 	}
@@ -181,10 +184,7 @@ func SignInUserByCredentials(ctx context.Context, q *db.Queries, te contract.Tok
 }
 
 func generateAuthTokenPairs(u db.User, kycStatus contract.KYCStatus, te contract.TokenEncoder) (string, string, error) {
-	claims := getUserClaims(&u)
-	maps.Copy(claims, map[string]any{
-		"kyc_status": kycStatus,
-	})
+	claims := getUserClaims(&u, kycStatus)
 	accessToken, err := te.EncodeWithClaims(claims, u.ID)
 	if err != nil {
 		return "", "", err
@@ -194,11 +194,12 @@ func generateAuthTokenPairs(u db.User, kycStatus contract.KYCStatus, te contract
 	return accessToken, refreshToken, nil
 }
 
-func getUserClaims(u *db.User) map[string]any {
-	return map[string]any{
-		"display_name":   u.Name,
-		"email":          u.Email,
-		"email_verified": u.EmailVerified,
-		"photo":          u.Image,
+func getUserClaims(u *db.User, kycStatus contract.KYCStatus) contract.BearerClaims {
+	return contract.BearerClaims{
+		KYCStatus:     kycStatus,
+		DisplayName:   u.Name,
+		Email:         u.Email,
+		EmailVerified: u.EmailVerified,
+		Photo:         u.Image,
 	}
 }

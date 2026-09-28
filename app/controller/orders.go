@@ -210,7 +210,7 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 	public.GET("", c.handleFindOrders)
 
 	secured := router.Group("", authMiddleware)
-	secured.POST("", kycMiddleware, c.handlePlaceOrder)
+	secured.POST("", kycMiddleware(contract.KYCVerified), c.handlePlaceOrder)
 	c.subscribeToEventsV1()
 }
 

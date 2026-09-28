@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"io"
 	"log/slog"
 
 	"github.com/brinestone/mogtrade/core/contract"
@@ -19,13 +20,20 @@ type KYC struct {
 }
 
 func (k *KYC) handleBeginKyc(c *gin.Context) {
-
+	frontFile, header, err := c.Request.FormFile("front")
+	if err != nil {
+		panic(err)
+	}
+	front, err := io.ReadAll(frontFile)
+	println(front)
+	println(header.Filename)
 }
 
 func (k *KYC) MountV1(r *gin.RouterGroup) {
 	router := r.Group("/kyc")
 
-	secured := router.Group("", helpers.ProvideAuthMiddleware(), helpers.ProvideKYCMiddleware())
+	kycMiddleware := helpers.ProvideKYCMiddleware()
+	secured := router.Group("", helpers.ProvideAuthMiddleware(), kycMiddleware(contract.KYCPending))
 	secured.POST("/", k.handleBeginKyc)
 }
 

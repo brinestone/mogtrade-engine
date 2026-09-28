@@ -3,11 +3,11 @@ package helpers
 import (
 	"context"
 
-	"github.com/gin-gonic/gin"
+	"github.com/brinestone/mogtrade/web/middleware"
 	"go-slim.dev/ioc"
 )
 
-func ProvideKYCMiddleware() gin.HandlerFunc {
-	ptr, _ := ioc.NamedGet[gin.HandlerFunc](context.TODO(), "middleware.kyc")
+func ProvideKYCMiddleware() middleware.KYCMiddleware {
+	ptr, _ := ioc.NamedGet[middleware.KYCMiddleware](context.TODO(), "middleware.kyc")
 	return *ptr
 }

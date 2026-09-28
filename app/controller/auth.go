@@ -64,6 +64,7 @@ func (a *Auth) handleCredentialLogin(c *gin.Context) {
 		Identifier:           request.Username,
 		Password:             request.Password,
 		DeviceId:             request.DeviceId,
+		RefreshTokenId:       a.idg(),
 		RefreshTokenLifetime: a.refreshLifetime,
 	})
 	if err != nil {

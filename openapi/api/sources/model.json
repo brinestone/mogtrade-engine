@@ -1,0 +1,941 @@
+{
+    "smithy": "2.0",
+    "shapes": {
+        "mogtrade.api#Api": {
+            "type": "service",
+            "version": "1.0.0",
+            "operations": [
+                {
+                    "target": "mogtrade.api#CheckEmailAvailable"
+                },
+                {
+                    "target": "mogtrade.api#CredentialSignIn"
+                },
+                {
+                    "target": "mogtrade.api#CredentialSignUp"
+                },
+                {
+                    "target": "mogtrade.api#GetWalletInfo"
+                },
+                {
+                    "target": "mogtrade.api#RotateAccessToken"
+                }
+            ],
+            "resources": [
+                {
+                    "target": "mogtrade.api#Order"
+                }
+            ],
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#InternalServerError"
+                },
+                {
+                    "target": "mogtrade.core.types#ValidationError"
+                }
+            ],
+            "traits": {
+                "aws.protocols#restJson1": {},
+                "smithy.api#httpBearerAuth": {},
+                "smithy.api#title": "MogTrade API"
+            }
+        },
+        "mogtrade.api#CheckEmailAvailable": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#CheckEmailAvailableInput"
+            },
+            "output": {
+                "target": "mogtrade.core.types#AvailabilityOutput"
+            },
+            "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "Check whether an email is available for a user to create an account with",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/auth/email-available"
+                },
+                "smithy.api#readonly": {},
+                "smithy.api#tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "mogtrade.api#CheckEmailAvailableInput": {
+            "type": "structure",
+            "members": {
+                "email": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The email address query",
+                        "smithy.api#httpQuery": "email",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#CredentialSignIn": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#CredentialSignInInput"
+            },
+            "output": {
+                "target": "mogtrade.api#SignInOutput"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#UnauthorizedError"
+                },
+                {
+                    "target": "mogtrade.core.types#UnprocessibleError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "Sign in users by obtaining a JWT access token and a refresh token",
+                "smithy.api#http": {
+                    "method": "POST",
+                    "uri": "/api/v1/auth/login/credential"
+                },
+                "smithy.api#tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "mogtrade.api#CredentialSignInInput": {
+            "type": "structure",
+            "members": {
+                "email": {
+                    "target": "mogtrade.core.types#EmailAddress",
+                    "traits": {
+                        "smithy.api#documentation": "The user's identifying email address",
+                        "smithy.api#required": {}
+                    }
+                },
+                "password": {
+                    "target": "mogtrade.core.types#Password",
+                    "traits": {
+                        "smithy.api#documentation": "The user's password",
+                        "smithy.api#required": {}
+                    }
+                },
+                "deviceId": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The client device's ID",
+                        "smithy.api#httpHeader": "X-D-Id",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#CredentialSignUp": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#CredentialSignUpInput"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#ConflictError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "Create user account using credentials",
+                "smithy.api#http": {
+                    "method": "POST",
+                    "uri": "/api/v1/auth/register/credential",
+                    "code": 201
+                },
+                "smithy.api#tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "mogtrade.api#CredentialSignUpInput": {
+            "type": "structure",
+            "members": {
+                "names": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The names of the user",
+                        "smithy.api#required": {}
+                    }
+                },
+                "email": {
+                    "target": "mogtrade.core.types#EmailAddress",
+                    "traits": {
+                        "smithy.api#documentation": "The email address of the user. NOTE: must be unique",
+                        "smithy.api#required": {}
+                    }
+                },
+                "password": {
+                    "target": "mogtrade.core.types#Password",
+                    "traits": {
+                        "smithy.api#documentation": "User's password",
+                        "smithy.api#required": {}
+                    }
+                },
+                "confirmPassword": {
+                    "target": "mogtrade.core.types#Password",
+                    "traits": {
+                        "smithy.api#documentation": "Password confirmation",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#FindOrder": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#FindOrderInput"
+            },
+            "output": {
+                "target": "mogtrade.api#FindOrderOutput"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#NotFoundError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [
+                    "smithy.api#httpBearerAuth"
+                ],
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/orders/{id}"
+                },
+                "smithy.api#readonly": {},
+                "smithy.api#tags": [
+                    "Order"
+                ]
+            }
+        },
+        "mogtrade.api#FindOrderInput": {
+            "type": "structure",
+            "members": {
+                "id": {
+                    "target": "mogtrade.api#OrderId",
+                    "traits": {
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#FindOrderOutput": {
+            "type": "structure",
+            "mixins": [
+                {
+                    "target": "mogtrade.api#OrderRecord"
+                }
+            ],
+            "members": {},
+            "traits": {
+                "smithy.api#output": {}
+            }
+        },
+        "mogtrade.api#GetOrders": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#GetOrdersInput"
+            },
+            "output": {
+                "target": "mogtrade.api#GetOrdersOutput"
+            },
+            "traits": {
+                "smithy.api#auth": [
+                    "smithy.api#httpBearerAuth"
+                ],
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/orders"
+                },
+                "smithy.api#paginated": {
+                    "outputToken": "nextCursor",
+                    "inputToken": "cursor",
+                    "pageSize": "limit"
+                },
+                "smithy.api#readonly": {},
+                "smithy.api#tags": [
+                    "Order"
+                ]
+            }
+        },
+        "mogtrade.api#GetOrdersInput": {
+            "type": "structure",
+            "members": {
+                "limit": {
+                    "target": "smithy.api#Integer",
+                    "traits": {
+                        "smithy.api#default": 100,
+                        "smithy.api#httpQuery": "limit"
+                    }
+                },
+                "cursor": {
+                    "target": "mogtrade.api#OrderId",
+                    "traits": {
+                        "smithy.api#httpQuery": "cursor"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#GetOrdersOutput": {
+            "type": "structure",
+            "members": {
+                "nextCursor": {
+                    "target": "mogtrade.api#OrderId"
+                },
+                "data": {
+                    "target": "mogtrade.api#OrderLookupList",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#output": {}
+            }
+        },
+        "mogtrade.api#GetWalletInfo": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#GetWalletInfoInput"
+            },
+            "output": {
+                "target": "mogtrade.api#GetWalletInfoOutput"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#NotFoundError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [
+                    "smithy.api#httpBearerAuth"
+                ],
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/wallet/{type}"
+                },
+                "smithy.api#readonly": {},
+                "smithy.api#tags": [
+                    "Economy"
+                ]
+            }
+        },
+        "mogtrade.api#GetWalletInfoInput": {
+            "type": "structure",
+            "members": {
+                "type": {
+                    "target": "mogtrade.core.types#WalletType",
+                    "traits": {
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#GetWalletInfoOutput": {
+            "type": "structure",
+            "members": {
+                "balance": {
+                    "target": "mogtrade.core.types#NumericString",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "walletId": {
+                    "target": "mogtrade.core.types#Ulid",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "totalTransactions": {
+                    "target": "smithy.api#Long",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "lastActivityAt": {
+                    "target": "smithy.api#Timestamp"
+                }
+            },
+            "traits": {
+                "smithy.api#output": {}
+            }
+        },
+        "mogtrade.api#Order": {
+            "type": "resource",
+            "identifiers": {
+                "id": {
+                    "target": "mogtrade.api#OrderId"
+                }
+            },
+            "properties": {
+                "symbol": {
+                    "target": "smithy.api#String"
+                },
+                "side": {
+                    "target": "mogtrade.core.types#OrderSide"
+                },
+                "currency": {
+                    "target": "smithy.api#String"
+                },
+                "type": {
+                    "target": "mogtrade.core.types#OrderType"
+                },
+                "qty": {
+                    "target": "mogtrade.core.types#NumericString"
+                },
+                "limitPrice": {
+                    "target": "mogtrade.core.types#NumericString"
+                },
+                "stopPrice": {
+                    "target": "mogtrade.core.types#NumericString"
+                },
+                "status": {
+                    "target": "mogtrade.core.types#OrderStatus"
+                },
+                "createdAt": {
+                    "target": "smithy.api#Timestamp"
+                },
+                "updatedAt": {
+                    "target": "smithy.api#Timestamp"
+                }
+            },
+            "create": {
+                "target": "mogtrade.api#PlaceOrder"
+            },
+            "read": {
+                "target": "mogtrade.api#FindOrder"
+            },
+            "list": {
+                "target": "mogtrade.api#GetOrders"
+            }
+        },
+        "mogtrade.api#OrderData": {
+            "type": "structure",
+            "members": {
+                "symbol": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "side": {
+                    "target": "mogtrade.core.types#OrderSide",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "currency": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "type": {
+                    "target": "mogtrade.core.types#OrderType",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "qty": {
+                    "target": "mogtrade.core.types#NumericString",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "limitPrice": {
+                    "target": "mogtrade.core.types#NumericString"
+                },
+                "stopPrice": {
+                    "target": "mogtrade.core.types#NumericString"
+                },
+                "status": {
+                    "target": "mogtrade.core.types#OrderStatus",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#mixin": {}
+            }
+        },
+        "mogtrade.api#OrderId": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+        },
+        "mogtrade.api#OrderIdentifiers": {
+            "type": "structure",
+            "members": {
+                "id": {
+                    "target": "mogtrade.api#OrderId",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#mixin": {}
+            }
+        },
+        "mogtrade.api#OrderLookup": {
+            "type": "structure",
+            "mixins": [
+                {
+                    "target": "mogtrade.api#OrderRecord"
+                }
+            ],
+            "members": {}
+        },
+        "mogtrade.api#OrderLookupList": {
+            "type": "list",
+            "member": {
+                "target": "mogtrade.api#OrderLookup"
+            }
+        },
+        "mogtrade.api#OrderRecord": {
+            "type": "structure",
+            "mixins": [
+                {
+                    "target": "mogtrade.api#OrderIdentifiers"
+                },
+                {
+                    "target": "mogtrade.api#OrderData"
+                },
+                {
+                    "target": "mogtrade.api#OrderTimestamps"
+                }
+            ],
+            "members": {},
+            "traits": {
+                "smithy.api#mixin": {}
+            }
+        },
+        "mogtrade.api#OrderTimestamps": {
+            "type": "structure",
+            "members": {
+                "createdAt": {
+                    "target": "smithy.api#Timestamp",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "updatedAt": {
+                    "target": "smithy.api#Timestamp",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#mixin": {}
+            }
+        },
+        "mogtrade.api#PlaceOrder": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#PlaceOrderInput"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#UnprocessibleError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [
+                    "smithy.api#httpBearerAuth"
+                ],
+                "smithy.api#http": {
+                    "method": "POST",
+                    "uri": "/api/v1/orders",
+                    "code": 202
+                },
+                "smithy.api#tags": [
+                    "Order"
+                ]
+            }
+        },
+        "mogtrade.api#PlaceOrderInput": {
+            "type": "structure",
+            "mixins": [
+                {
+                    "target": "mogtrade.api#OrderData"
+                }
+            ],
+            "members": {
+                "clientId": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#httpHeader": "X-Idempotency-Token",
+                        "smithy.api#notProperty": {},
+                        "smithy.api#required": {}
+                    }
+                },
+                "walletType": {
+                    "target": "mogtrade.core.types#WalletType",
+                    "traits": {
+                        "smithy.api#notProperty": {},
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#RotateAccessToken": {
+            "type": "operation",
+            "input": {
+                "target": "mogtrade.api#RotateAccessTokenInput"
+            },
+            "output": {
+                "target": "mogtrade.api#SignInOutput"
+            },
+            "errors": [
+                {
+                    "target": "mogtrade.core.types#UnauthorizedError"
+                }
+            ],
+            "traits": {
+                "smithy.api#auth": [],
+                "smithy.api#documentation": "Rotate access token",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/api/v1/auth/refresh"
+                },
+                "smithy.api#readonly": {},
+                "smithy.api#tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "mogtrade.api#RotateAccessTokenInput": {
+            "type": "structure",
+            "members": {
+                "refreshToken": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The refresh token from previous sign in/refresh requests",
+                        "smithy.api#httpHeader": "X-Refresh-Token",
+                        "smithy.api#required": {}
+                    }
+                },
+                "deviceId": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The device id",
+                        "smithy.api#httpHeader": "X-d-Id",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "mogtrade.api#SignInOutput": {
+            "type": "structure",
+            "members": {
+                "accessToken": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The  access token (JWT) granted to the user",
+                        "smithy.api#required": {}
+                    }
+                },
+                "refreshToken": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The refresh token",
+                        "smithy.api#required": {}
+                    }
+                }
+            }
+        },
+        "mogtrade.core.types#AvailabilityOutput": {
+            "type": "structure",
+            "members": {
+                "available": {
+                    "target": "smithy.api#Boolean",
+                    "traits": {
+                        "smithy.api#documentation": "Whether the requested resource identifier is available or not",
+                        "smithy.api#required": {}
+                    }
+                }
+            }
+        },
+        "mogtrade.core.types#ConflictError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The error message from the server",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 409
+            }
+        },
+        "mogtrade.core.types#Currency": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^[A-Z]{3}$"
+            }
+        },
+        "mogtrade.core.types#EmailAddress": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"
+            }
+        },
+        "mogtrade.core.types#ErrorMessages": {
+            "type": "list",
+            "member": {
+                "target": "smithy.api#String"
+            }
+        },
+        "mogtrade.core.types#InternalServerError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "The error message from the server",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "server",
+                "smithy.api#httpError": 500
+            }
+        },
+        "mogtrade.core.types#NotFoundError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "smithy.api#String"
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "A resource was not found",
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 404
+            }
+        },
+        "mogtrade.core.types#NumericString": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^\\-?[0-9]+(\\.[0-9]{1,8})?$"
+            }
+        },
+        "mogtrade.core.types#OrderSide": {
+            "type": "enum",
+            "members": {
+                "BUY": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "buy"
+                    }
+                },
+                "SELL": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "sell"
+                    }
+                }
+            }
+        },
+        "mogtrade.core.types#OrderStatus": {
+            "type": "enum",
+            "members": {
+                "PENDING": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "pending"
+                    }
+                },
+                "SUBMITTED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "submitted"
+                    }
+                },
+                "PARTIALLY_FILLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "partially_filled"
+                    }
+                },
+                "FILLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "filled"
+                    }
+                },
+                "CANCELLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "cancelled"
+                    }
+                },
+                "REJECTED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "rejected"
+                    }
+                },
+                "EXPIRED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "expired"
+                    }
+                }
+            }
+        },
+        "mogtrade.core.types#OrderType": {
+            "type": "enum",
+            "members": {
+                "STOP": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "stop"
+                    }
+                },
+                "LIMIT": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "limit"
+                    }
+                },
+                "MARKET": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "market"
+                    }
+                },
+                "STOP_LIMIT": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "stop_limit"
+                    }
+                }
+            }
+        },
+        "mogtrade.core.types#Password": {
+            "type": "string",
+            "traits": {
+                "smithy.api#length": {
+                    "min": 6,
+                    "max": 100
+                },
+                "smithy.api#sensitive": {}
+            }
+        },
+        "mogtrade.core.types#Ulid": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+        },
+        "mogtrade.core.types#UnauthorizedError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 401
+            }
+        },
+        "mogtrade.core.types#UnprocessibleError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "mogtrade.core.types#ErrorMessages",
+                    "traits": {
+                        "smithy.api#documentation": "A list of validation messages",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 422
+            }
+        },
+        "mogtrade.core.types#ValidationError": {
+            "type": "structure",
+            "members": {
+                "error": {
+                    "target": "mogtrade.core.types#ErrorMessages",
+                    "traits": {
+                        "smithy.api#documentation": "A list of validation messages",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 400
+            }
+        },
+        "mogtrade.core.types#WalletType": {
+            "type": "enum",
+            "members": {
+                "VIRTUAL": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "virtual"
+                    }
+                },
+                "REAL": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "real"
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -28,18 +29,15 @@ func (e *JwtAdapter) VerifyWithClaims(token string, consumer contract.ClaimsCons
 		return false, err
 	}
 
-	appClaims, ok := t.Claims.(AppClaims)
-	if !ok {
+	j, _ := json.Marshal(t.Claims)
+	var claims jwtPayload
+	err = json.Unmarshal(j, &claims)
+	if err != nil {
 		return false, ErrClaimsParsing
 	}
-	defer consumer(appClaims.CustomFields)
+	defer consumer(claims.AppClaims)
 
 	return t.Valid, nil
-}
-
-type AppClaims struct {
-	CustomFields map[string]any `json:"custom_fields,omitempty"`
-	jwt.RegisteredClaims
 }
 
 func (e *JwtAdapter) VerifyToken(token string, g contract.IdConsumerFunc) (bool, error) {
@@ -58,7 +56,12 @@ func (e *JwtAdapter) VerifyToken(token string, g contract.IdConsumerFunc) (bool,
 	return t.Valid, nil
 }
 
-func (e *JwtAdapter) EncodeWithClaims(claims map[string]any, subject string) (string, error) {
+type jwtPayload struct {
+	AppClaims contract.BearerClaims `json:"custom_fields"`
+	jwt.RegisteredClaims
+}
+
+func (e *JwtAdapter) EncodeWithClaims(claims contract.BearerClaims, subject string) (string, error) {
 	now := time.Now()
 	regClaims := jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(now.UTC().Add(e.tokenLifetime)),
@@ -68,9 +71,9 @@ func (e *JwtAdapter) EncodeWithClaims(claims map[string]any, subject string) (st
 		Issuer:    e.issuer,
 	}
 
-	c := AppClaims{
+	c := jwtPayload{
 		RegisteredClaims: regClaims,
-		CustomFields:     claims,
+		AppClaims:        claims,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)

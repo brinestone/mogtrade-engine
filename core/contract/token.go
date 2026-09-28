@@ -1,11 +1,11 @@
 package contract
 
 type TokenEncoder interface {
-	EncodeWithClaims(map[string]any, string) (string, error)
+	EncodeWithClaims(BearerClaims, string) (string, error)
 }
 
 type IdConsumerFunc func(string)
-type ClaimsConsumerFunc func(map[string]any)
+type ClaimsConsumerFunc func(BearerClaims)
 
 type TokenVerifier interface {
 	VerifyToken(string, IdConsumerFunc) (bool, error)
