@@ -101,6 +101,6 @@ func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
 		}); err != nil {
 			panic(err)
 		}
-		e.Use(sgin.New(sgin.Options{}))
+		e.Use(sgin.New(sgin.Options{Repanic: true}))
 	}
 }

@@ -166,7 +166,7 @@ operation FindOrder {
 @tags(["Order"])
 @auth([httpBearerAuth])
 @http(method: "GET", uri: "/api/v1/orders")
-@paginated(outputToken: "nextCursor", inputToken: "cursor", pageSize: "limit")
+@paginated(items:"data",outputToken: "nextCursor", inputToken: "cursor", pageSize: "limit")
 operation GetOrders {
     input: GetOrdersInput
     output: GetOrdersOutput
