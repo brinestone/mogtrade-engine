@@ -67,7 +67,7 @@ func SetupControllers() error {
 	ioc.Factory(controller.NewFeedController, true)
 	ioc.Factory(controller.NewOrdersController, true)
 	ioc.Factory(controller.NewAuthController, true)
-	ioc.Factory(func(r *db.Queries, l *slog.Logger, p *pgxpool.Pool, idg contract.IdGeneratorFunc) *controller.Wallets {
+	ioc.Factory(func(r *db.Queries, l *slog.Logger, p *pgxpool.Pool, idg contract.IdFactory) *controller.Wallets {
 		return controller.NewWalletsController(r, l, p, decimal.NewFromFloat(100_000), decimal.Zero, idg)
 	}, true)
 	ioc.Factory(controller.NewUserController, true)

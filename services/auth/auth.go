@@ -109,7 +109,7 @@ func RotateAccessToken(ctx context.Context, q *db.Queries, te contract.TokenEnco
 	return SignInResult{AccessToken: newAccessToken, RefreshToken: newRefresh}, nil
 }
 
-func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
+func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.IdFactory, csi CredentialSignUpInput) (SignUpResult, error) {
 	exists, err := q.CredentialAccountExistsByIdentifier(ctx, csi.Identifier)
 	if err != nil {
 		return SignUpResult{}, err

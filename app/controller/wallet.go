@@ -27,7 +27,7 @@ type Wallets struct {
 	pool             *pgxpool.Pool
 	vStartingBalance decimal.Decimal
 	rStartingBalance decimal.Decimal
-	idGenerator      contract.IdGeneratorFunc
+	idGenerator      contract.IdFactory
 }
 
 func (w *Wallets) handleGetBalance(c *gin.Context) {
@@ -157,10 +157,10 @@ func (w *Wallets) MountV1(r *gin.RouterGroup) {
 	authMiddleware := helpers.ProvideAuthMiddleware()
 
 	secured := r.Group("/wallet", authMiddleware)
-	secured.GET("/:type", w.handleGetBalance)
+	secured.GET("/status/:type", w.handleGetBalance)
 }
 
-func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool, vStart decimal.Decimal, rStart decimal.Decimal, idg contract.IdGeneratorFunc) *Wallets {
+func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool, vStart decimal.Decimal, rStart decimal.Decimal, idg contract.IdFactory) *Wallets {
 	return &Wallets{
 		repo,
 		logger.With("controller", "wallet"),

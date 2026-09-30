@@ -5,6 +5,6 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-var UlidIdGenerator contract.IdGeneratorFunc = func() string {
+var UlidIdGenerator contract.IdFactory = func() string {
 	return ulid.Make().String()
 }

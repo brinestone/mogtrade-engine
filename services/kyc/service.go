@@ -10,7 +10,6 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -31,11 +30,12 @@ var (
 )
 
 type CreateParams struct {
-	ID             string
-	UserID         string
-	ValidWindow    time.Duration
-	IdentityDoc    contract.IdentityDocument
-	ProofOfAddress contract.ProofOfAddressDocument
+	ID               string
+	UserID           string
+	IdempotencyToken string
+	ValidWindow      time.Duration
+	IdentityDoc      contract.IdentityDocument
+	ProofOfAddress   contract.ProofOfAddressDocument
 }
 
 type UpdateDocumentsParams struct {
@@ -78,6 +78,13 @@ func CreateRecord(ctx context.Context, q *db.Queries, p CreateParams) error {
 	if err != nil {
 		return fmt.Errorf("marshal proof of address: %w", err)
 	}
+	recordExists, err := q.UserHasActiveKYCProfile(ctx, &p.UserID)
+	if err != nil {
+		return err
+	}
+	if recordExists {
+		return ErrKycAlreadyExists
+	}
 	err = q.CreateKycRecord(ctx, db.CreateKycRecordParams{
 		ID:             p.ID,
 		ValidWindow:    window.String(),
@@ -85,14 +92,8 @@ func CreateRecord(ctx context.Context, q *db.Queries, p CreateParams) error {
 		ProofOfAddress: address,
 		UserID:         &p.UserID,
 	})
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return ErrKycAlreadyExists
-		}
-		return err
-	}
-	return nil
+
+	return err
 }
 
 // GetByUser returns the KYC record for a user.

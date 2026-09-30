@@ -26,7 +26,7 @@ type Auth struct {
 	pool            *pgxpool.Pool
 	refreshLifetime time.Duration
 	tokenEncoder    contract.TokenEncoder
-	idg             contract.IdGeneratorFunc
+	idg             contract.IdFactory
 }
 
 const (
@@ -98,7 +98,7 @@ func (a *Auth) handleCredentialRegister(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
 		return
 	}
-	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdGeneratorFunc) (auth.SignUpResult, error) {
+	result, err := ioc.Call2[auth.SignUpResult](c.Request.Context(), func(p *pgxpool.Pool, q *db.Queries, idg contract.IdFactory) (auth.SignUpResult, error) {
 		a.logger.Debug("validation successful, creating user", "email", request.Email, "type", "credential")
 		tx, err := p.Begin(c.Request.Context())
 		if err != nil {
@@ -217,7 +217,7 @@ func (a *Auth) MountV1(r *gin.RouterGroup) {
 	public.GET("/email-available", a.handleEmailExistsCheck)
 }
 
-func NewAuthController(idg contract.IdGeneratorFunc, l *slog.Logger, q *db.Queries, p *pgxpool.Pool, te contract.TokenEncoder) *Auth {
+func NewAuthController(idg contract.IdFactory, l *slog.Logger, q *db.Queries, p *pgxpool.Pool, te contract.TokenEncoder) *Auth {
 	var lifetime time.Duration
 	lifetime, err := time.ParseDuration(os.Getenv("REFRESH_LIFETIME"))
 	if err != nil {

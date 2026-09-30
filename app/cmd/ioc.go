@@ -284,7 +284,7 @@ func startAsyncTasks(ctx context.Context) {
 	if err != nil {
 		panic(err)
 	}
-	idg, err := ioc.Get[contract.IdGeneratorFunc](ctx)
+	idg, err := ioc.Get[contract.IdFactory](ctx)
 	if err != nil {
 		panic(err)
 	}

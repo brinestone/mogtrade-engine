@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/kyc"
 	"github.com/brinestone/mogtrade/web/helpers"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,6 +23,7 @@ type KYC struct {
 	pool   *pgxpool.Pool
 	q      *db.Queries
 	store  contract.ObjectStorage
+	idg    contract.IdFactory
 	eb     contract.EventBus
 	UploadLimits
 }
@@ -33,14 +37,15 @@ type beginKycPayload struct {
 	City          string          `json:"city" form:"city" binding:"required"`
 	State         string          `json:"state" form:"state" binding:"required"`
 	Gender        contract.Gender `json:"gender" form:"gender" binding:"required"`
-	Selfie        string          `json:"selfie" form:"selfie" binding:"required,url"`
+	Selfie        string          `json:"selfie" form:"selfie" binding:"required"`
 	Country       string          `json:"country" form:"country" binding:"required"`
 	ClientId      string          `json:"clientId" form:"clientId" binding:"required"`
 	LegalNames    string          `json:"legalNames" form:"legalNames" binding:"required"`
-	DocumentBack  string          `json:"docBack" form:"docBack" binding:"required,url"`
+	DocumentBack  string          `json:"docBack" form:"docBack" binding:"required"`
 	AddressLine1  string          `json:"addressLine1" form:"addressLine1" binding:"required"`
 	AddressLine2  *string         `json:"addressLine2" form:"addressLine2" binding:"omitempty"`
-	DocumentFront string          `json:"docFront" form:"docFront" binding:"required,url"`
+	DocumentFront string          `json:"docFront" form:"docFront" binding:"required"`
+	PhoneNumber   string          `json:"phoneNumber" form:"phoneNumber" binding:"required,phone"`
 }
 
 func (k *KYC) handleBeginKyc(c *gin.Context) {
@@ -48,6 +53,21 @@ func (k *KYC) handleBeginKyc(c *gin.Context) {
 	if err := c.ShouldBind(&payload); err != nil {
 		msgs := strings.Split(err.Error(), "\n")
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": msgs, "code": "BAD_REQUEST"})
+		return
+	}
+
+	k.logger.Debug("opening database transaction")
+	if err := helpers.WithTransaction(c.Request.Context(), func(tx pgx.Tx) error {
+		return kyc.CreateRecord(c.Request.Context(), k.q.WithTx(tx), kyc.CreateParams{
+			ID:     k.idg(),
+			UserID: helpers.GetCurrentUserId(c),
+		})
+	}); err != nil {
+		if errors.Is(err, kyc.ErrKycAlreadyExists) {
+			c.Status(http.StatusProcessing)
+			return
+		}
+		helpers.InternalServerError(c)
 		return
 	}
 
@@ -61,7 +81,7 @@ func (k *KYC) MountV1(r *gin.RouterGroup) {
 	secured.POST("", k.handleBeginKyc)
 }
 
-func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store contract.ObjectStorage, eb contract.EventBus) *KYC {
+func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store contract.ObjectStorage, eb contract.EventBus, idg contract.IdFactory) *KYC {
 	maxUploadSize, err := strconv.Atoi(os.Getenv("MAX_UPLOAD_LIMIT"))
 	if err != nil {
 		panic(err)
@@ -73,5 +93,6 @@ func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store cont
 		UploadLimits: UploadLimits{maxUpload: int64(maxUploadSize)},
 		eb:           eb,
 		store:        store,
+		idg:          idg,
 	}
 }

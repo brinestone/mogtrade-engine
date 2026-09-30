@@ -32,7 +32,7 @@ type Orders struct {
 	riskEngine     *orders.RiskEngine
 	pool           *pgxpool.Pool
 	matchingEngine *matching.Engine
-	idGenerator    contract.IdGeneratorFunc
+	idGenerator    contract.IdFactory
 	eb             contract.EventBus
 	cc             contract.CurrencyConverter
 }
@@ -291,7 +291,7 @@ func (c *Orders) subscribeToEventsV1() {
 	go c.handleOnMatchFoundEvent(c.eb.Context(), matchFound)
 }
 
-func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdGeneratorFunc, e *matching.Engine, eb contract.EventBus, cc contract.CurrencyConverter) *Orders {
+func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdFactory, e *matching.Engine, eb contract.EventBus, cc contract.CurrencyConverter) *Orders {
 	return &Orders{
 		repo:           q,
 		logger:         l.With("controller", "orders"),

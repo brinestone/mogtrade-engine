@@ -341,6 +341,26 @@ func (q *Queries) UpdateKycDocuments(ctx context.Context, arg UpdateKycDocuments
 	return err
 }
 
+const userHasActiveKYCProfile = `-- name: UserHasActiveKYCProfile :one
+select
+    exists (
+        select
+            1
+        from
+            kyc_records
+        where
+            user_id = $1
+            and (status in ('pending', 'verified', 'verifying'))
+    )
+`
+
+func (q *Queries) UserHasActiveKYCProfile(ctx context.Context, userID *string) (bool, error) {
+	row := q.db.QueryRow(ctx, userHasActiveKYCProfile, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const verifyKyc = `-- name: VerifyKyc :exec
 update kyc_records
 set

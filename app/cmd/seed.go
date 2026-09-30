@@ -13,7 +13,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func performSeeding(ctx context.Context, p *pgxpool.Pool, l *slog.Logger, idg contract.IdGeneratorFunc) {
+func performSeeding(ctx context.Context, p *pgxpool.Pool, l *slog.Logger, idg contract.IdFactory) {
 	l.Debug("seeding database")
 	tx, err := p.Begin(ctx)
 	if err != nil {
@@ -30,7 +30,7 @@ func performSeeding(ctx context.Context, p *pgxpool.Pool, l *slog.Logger, idg co
 	tx.Commit(ctx)
 }
 
-func createSystemUser(ctx context.Context, q *db.Queries, l *slog.Logger, idg contract.IdGeneratorFunc) error {
+func createSystemUser(ctx context.Context, q *db.Queries, l *slog.Logger, idg contract.IdFactory) error {
 	l.Debug("creating system user account")
 	userId := os.Getenv("SYSTEM_USER_ID")
 	if len(userId) == 0 {
