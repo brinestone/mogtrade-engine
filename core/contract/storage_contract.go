@@ -1,14 +1,16 @@
 package contract
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // ObjectStorage defines the interface for object storage operations.
-// KYC service depends on this interface, not on concrete implementations.
 type ObjectStorage interface {
 	// Upload stores data at the given path and returns a URI/URL.
-	Upload(ctx context.Context, path string, data []byte) (string, error)
+	Upload(context.Context, string, io.ReadSeeker) (string, error)
 	// Download retrieves data at the given path.
-	Download(ctx context.Context, path string) ([]byte, error)
+	Download(context.Context, string) (io.ReadCloser, error)
 	// Delete removes the object at the given path.
 	Delete(ctx context.Context, path string) error
 	// Exists checks if an object exists at the given path.

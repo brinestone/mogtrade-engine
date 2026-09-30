@@ -112,7 +112,7 @@ func (k *KYC) MountV1(r *gin.RouterGroup) {
 	secured.POST("", k.handleBeginKyc)
 }
 
-func NewKycController(eb contract.EventBus, l *slog.Logger, p *pgxpool.Pool, q *db.Queries) *KYC {
+func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store contract.ObjectStorage, eb contract.EventBus) *KYC {
 	maxUploadSize, err := strconv.Atoi(os.Getenv("MAX_UPLOAD_LIMIT"))
 	if err != nil {
 		panic(err)
@@ -123,5 +123,6 @@ func NewKycController(eb contract.EventBus, l *slog.Logger, p *pgxpool.Pool, q *
 		q:            q,
 		UploadLimits: UploadLimits{maxUpload: int64(maxUploadSize)},
 		eb:           eb,
+		store:        store,
 	}
 }
