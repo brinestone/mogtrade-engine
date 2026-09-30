@@ -185,6 +185,8 @@ func CreateUserWallet(ctx context.Context, q *db.Queries, req CreateWalletParams
 }
 func isTransitionValid(tx db.WalletTransaction, status db.TransactionStatus) bool {
 	switch tx.Status {
+	case db.TransactionStatusCreated:
+		return status == db.TransactionStatusProcessing || status == db.TransactionStatusCancelled
 	case db.TransactionStatusProcessing:
 		return status == db.TransactionStatusFailed || status == db.TransactionStatusCancelled || status == db.TransactionStatusCompleted
 	case db.TransactionStatusFailed:

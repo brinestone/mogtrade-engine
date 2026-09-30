@@ -1,23 +1,20 @@
 package controller
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/billing"
 	"github.com/brinestone/mogtrade/web/helpers"
-	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
-	"go-slim.dev/ioc"
 )
 
 var (
@@ -33,72 +30,6 @@ type Wallets struct {
 	idGenerator      contract.IdGeneratorFunc
 }
 
-func onUserCreated(ctx context.Context, idg contract.IdGeneratorFunc, l *slog.Logger, pool *pgxpool.Pool, vsb decimal.Decimal, e eventpayloads.UserCreatedEventArgs) error {
-	l.Info("creating wallet for new user")
-	timedC, cancel := context.WithTimeout(ctx, time.Minute*30)
-	defer cancel()
-
-	l.Debug("opening transaction")
-	tx, err := pool.Begin(timedC)
-	if err != nil {
-		l.Error("failed to open transaction", "err", err.Error())
-		return err
-	}
-	defer tx.Rollback(timedC)
-
-	repo := db.New(tx)
-	realId := idg()
-	vId := idg()
-	err = billing.CreateUserWallet(timedC, repo, billing.CreateWalletParams{
-		OwnerId: e.UserId,
-		Type:    db.WalletTypeReal,
-		Id:      realId,
-	})
-	if err == nil {
-		l.Info("wallet created successfully", "type", db.WalletTypeReal)
-	} else {
-		l.Warn("failed to create wallet for user", "err", err.Error())
-	}
-
-	err = billing.CreateUserWallet(timedC, repo, billing.CreateWalletParams{
-		OwnerId: e.UserId,
-		Type:    db.WalletTypeVirtual,
-		Id:      vId,
-	})
-	if err != nil {
-		l.Warn("failed to create wallet for user", "err", err.Error(), "type", db.WalletTypeVirtual)
-		return err
-	}
-
-	txId := idg()
-	err = billing.RecordWalletTransaction(ctx, repo, billing.RecordWalletTransactionParams{
-		Id:               txId,
-		Src:              new(helpers.GetSystemVirtualWalletId()),
-		Dest:             &vId,
-		Intent:           "initial deposit",
-		ExtraData:        make(map[string]any),
-		IdempotencyToken: idg(),
-		DoneBy:           helpers.GetSystemUserId(),
-		TracingId:        idg(),
-		Currency:         "USD",
-		ExchangeRate:     decimal.NewFromInt(1),
-		Value:            vsb,
-	})
-	if err != nil {
-		return err
-	}
-	err = billing.UpdateWalletTransactionStatus(ctx, repo, billing.UpdateTransactionStatusParams{
-		TransactionId: txId,
-		Status:        db.TransactionStatusCompleted,
-	})
-	if err == nil {
-		tx.Commit(timedC)
-		l.Info("wallet created successfully", "type", db.WalletTypeVirtual)
-	}
-
-	return err
-}
-
 func (w *Wallets) handleGetBalance(c *gin.Context) {
 	var req httppayloads.GetWalletSnapshotRequest
 	if err := c.ShouldBindUri(&req); err != nil {
@@ -111,6 +42,30 @@ func (w *Wallets) handleGetBalance(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, billing.ErrWalletNotFound) {
+			w.logger.Warn("user wallet not found, checking whether user exists", "uid", helpers.GetCurrentUserId(c))
+			userExists, err := auth.UserExistsWithId(c.Request.Context(), w.repo, helpers.GetCurrentUserId(c))
+			if err != nil {
+				w.logger.Error("could not check for user existing", "err", err.Error(), "uid", helpers.GetCurrentUserId(c))
+				helpers.InternalServerError(c)
+				return
+			}
+			if userExists {
+				w.logger.Info("user exists, creating their wallets", "type", req.Type, "uid", helpers.GetCurrentUserId(c))
+				err = w.createUserWallets(c)
+				if err != nil {
+					helpers.InternalServerError(c)
+					return
+				} else {
+					snapshot, err = billing.GetCurrentWalletSnapshot(c.Request.Context(), w.repo, billing.GetWalletSnapshotParams{
+						Type:    req.Type,
+						OwnerId: helpers.GetCurrentUserId(c),
+					})
+					if err != nil {
+						helpers.InternalServerError(c)
+						return
+					}
+				}
+			}
 			w.logger.Warn("user wallet not found", "uid", helpers.GetCurrentUserId(c), "type", req.Type)
 			c.AbortWithStatusJSON(http.StatusNotFound, PayloadWalletNotFound)
 			return
@@ -121,28 +76,88 @@ func (w *Wallets) handleGetBalance(c *gin.Context) {
 	c.JSON(http.StatusOK, httppayloads.WalletSnapshotPayload(snapshot))
 }
 
-func (w *Wallets) MountV1(r *gin.RouterGroup) {
-	authMiddleware := helpers.ProvideAuthMiddleware()
-	router := r.Group("/wallet", authMiddleware)
-	router.GET("/:type", w.handleGetBalance)
-	ioc.Invoke(context.TODO(), w.subscribeToEventsV1)
+func (w *Wallets) createUserWallets(c *gin.Context) error {
+	w.logger.Debug("opening database transaction")
+	tx, err := w.pool.Begin(c.Request.Context())
+	if err != nil {
+		w.logger.Error("could not open database transaction", "err", err.Error())
+		return err
+	}
+	defer tx.Rollback(c.Request.Context())
+
+	repo := w.repo.WithTx(tx)
+	realId := w.idGenerator()
+	virtualId := w.idGenerator()
+
+	err = billing.CreateUserWallet(c.Request.Context(), repo, billing.CreateWalletParams{
+		OwnerId: helpers.GetCurrentUserId(c),
+		Type:    db.WalletTypeReal,
+		Id:      realId,
+	})
+
+	if err != nil {
+		if errors.Is(err, billing.ErrWalletAlreadyExists) {
+			w.logger.Warn("wallet already exists", "type", db.WalletTypeReal, "uid", helpers.GetCurrentUserId(c))
+		} else {
+			return err
+		}
+	}
+
+	w.logger.Info("created user wallet", "uid", helpers.GetCurrentUserId(c), "type", db.WalletTypeReal)
+
+	err = billing.CreateUserWallet(c.Request.Context(), repo, billing.CreateWalletParams{
+		OwnerId: helpers.GetCurrentUserId(c),
+		Type:    db.WalletTypeVirtual,
+		Id:      virtualId,
+	})
+
+	if err != nil {
+		if errors.Is(err, billing.ErrWalletAlreadyExists) {
+			w.logger.Warn("wallet already exists", "type", db.WalletTypeVirtual, "uid", helpers.GetCurrentUserId(c))
+		} else {
+			return err
+		}
+	}
+
+	w.logger.Info("created user wallet", "uid", helpers.GetCurrentUserId(c), "type", db.WalletTypeVirtual)
+	txId := w.idGenerator()
+	err = billing.RecordWalletTransaction(c.Request.Context(), repo, billing.RecordWalletTransactionParams{
+		Id:               txId,
+		Dest:             &virtualId,
+		Intent:           "Initial deposit",
+		IdempotencyToken: w.idGenerator(),
+		DoneBy:           helpers.GetCurrentUserId(c),
+		TracingId:        w.idGenerator(),
+		Currency:         "USD", // TODO: Get from user prefs
+		ExchangeRate:     decimal.NewFromInt(1),
+		Value:            w.vStartingBalance,
+		Src:              nil,
+	})
+	if err != nil {
+		w.logger.Error("could not create wallet transaction", "wallet-type", db.WalletTypeVirtual, "uid", helpers.GetCurrentUserId(c), "err", err.Error())
+		return err
+	}
+
+	err = billing.UpdateWalletTransactionStatus(c.Request.Context(), repo, billing.UpdateTransactionStatusParams{TransactionId: txId, Status: db.TransactionStatusProcessing})
+	if err != nil {
+		w.logger.Error("could not update wallet transaction", "id", txId, "uid", helpers.GetCurrentUserId(c))
+		return err
+	}
+	err = billing.UpdateWalletTransactionStatus(c.Request.Context(), repo, billing.UpdateTransactionStatusParams{TransactionId: txId, Status: db.TransactionStatusCompleted})
+	if err != nil {
+		w.logger.Error("could not update wallet transaction", "id", txId, "uid", helpers.GetCurrentUserId(c))
+		return err
+	}
+	w.logger.Info("wallet created successfully", "type", db.WalletTypeVirtual)
+	tx.Commit(c.Request.Context())
+	return nil
 }
 
-func (w *Wallets) subscribeToEventsV1(eb contract.EventBus) {
-	userCreatedCh := eb.Subscribe(EventKeyUserCreatedV1)
-	go func(ch contract.DataChannel, p *pgxpool.Pool, l *slog.Logger, vsb decimal.Decimal, rsb decimal.Decimal, idg contract.IdGeneratorFunc) {
-		for event := range ch {
-			ev, ok := event.Data.(eventpayloads.UserCreatedEventArgs)
-			if !ok {
-				w.logger.Warn("event payload is not of type eventpayloads.UserCreatedEventArgs")
-				continue
-			}
-			err := onUserCreated(eb.Context(), idg, l, p, vsb, ev)
-			if err != nil {
-				l.Error("event handler failed", "err", err.Error(), "event", EventKeyUserCreatedV1)
-			}
-		}
-	}(userCreatedCh, w.pool, w.logger, w.vStartingBalance, w.rStartingBalance, w.idGenerator)
+func (w *Wallets) MountV1(r *gin.RouterGroup) {
+	authMiddleware := helpers.ProvideAuthMiddleware()
+
+	secured := r.Group("/wallet", authMiddleware)
+	secured.GET("/:type", w.handleGetBalance)
 }
 
 func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool, vStart decimal.Decimal, rStart decimal.Decimal, idg contract.IdGeneratorFunc) *Wallets {
