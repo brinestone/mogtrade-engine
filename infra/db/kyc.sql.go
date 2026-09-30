@@ -45,7 +45,7 @@ func (q *Queries) CreateKycRecord(ctx context.Context, arg CreateKycRecordParams
 
 const getKycRecordByUser = `-- name: GetKycRecordByUser :one
 select
-    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason,
+    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason, k.legal_names, k.gender, k.dob, k.address,
     (k.created_at + k.valid_window)::timestamptz as expires_at,
     coalesce(
         k.status = 'verified'
@@ -73,6 +73,10 @@ type GetKycRecordByUserRow struct {
 	UpdatedAt       pgtype.Timestamptz
 	VerifiedBy      *string
 	RejectionReason *string
+	LegalNames      string
+	Gender          Gender
+	Dob             pgtype.Date
+	Address         []byte
 	ExpiresAt       pgtype.Timestamptz
 	Usable          bool
 }
@@ -93,6 +97,10 @@ func (q *Queries) GetKycRecordByUser(ctx context.Context, userID *string) (GetKy
 		&i.UpdatedAt,
 		&i.VerifiedBy,
 		&i.RejectionReason,
+		&i.LegalNames,
+		&i.Gender,
+		&i.Dob,
+		&i.Address,
 		&i.ExpiresAt,
 		&i.Usable,
 	)
@@ -101,7 +109,7 @@ func (q *Queries) GetKycRecordByUser(ctx context.Context, userID *string) (GetKy
 
 const listKycs = `-- name: ListKycs :many
 select
-    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason,
+    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason, k.legal_names, k.gender, k.dob, k.address,
     (k.created_at + k.valid_window)::timestamptz as expires_at,
     coalesce(
         k.status = 'verified'
@@ -127,6 +135,10 @@ type ListKycsRow struct {
 	UpdatedAt       pgtype.Timestamptz
 	VerifiedBy      *string
 	RejectionReason *string
+	LegalNames      string
+	Gender          Gender
+	Dob             pgtype.Date
+	Address         []byte
 	ExpiresAt       pgtype.Timestamptz
 	Usable          bool
 }
@@ -153,6 +165,10 @@ func (q *Queries) ListKycs(ctx context.Context) ([]ListKycsRow, error) {
 			&i.UpdatedAt,
 			&i.VerifiedBy,
 			&i.RejectionReason,
+			&i.LegalNames,
+			&i.Gender,
+			&i.Dob,
+			&i.Address,
 			&i.ExpiresAt,
 			&i.Usable,
 		); err != nil {
@@ -168,7 +184,7 @@ func (q *Queries) ListKycs(ctx context.Context) ([]ListKycsRow, error) {
 
 const listKycsByRiskProfile = `-- name: ListKycsByRiskProfile :many
 select
-    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason,
+    k.id, k.user_id, k.status, k.risk_profile, k.verified_at, k.valid_window, k.identity_doc, k.proof_of_address, k.created_at, k.updated_at, k.verified_by, k.rejection_reason, k.legal_names, k.gender, k.dob, k.address,
     (k.created_at + k.valid_window)::timestamptz as expires_at,
     coalesce(
         k.status = 'verified'
@@ -196,6 +212,10 @@ type ListKycsByRiskProfileRow struct {
 	UpdatedAt       pgtype.Timestamptz
 	VerifiedBy      *string
 	RejectionReason *string
+	LegalNames      string
+	Gender          Gender
+	Dob             pgtype.Date
+	Address         []byte
 	ExpiresAt       pgtype.Timestamptz
 	Usable          bool
 }
@@ -222,6 +242,10 @@ func (q *Queries) ListKycsByRiskProfile(ctx context.Context, riskProfile KycRisk
 			&i.UpdatedAt,
 			&i.VerifiedBy,
 			&i.RejectionReason,
+			&i.LegalNames,
+			&i.Gender,
+			&i.Dob,
+			&i.Address,
 			&i.ExpiresAt,
 			&i.Usable,
 		); err != nil {
@@ -315,6 +339,26 @@ type UpdateKycDocumentsParams struct {
 func (q *Queries) UpdateKycDocuments(ctx context.Context, arg UpdateKycDocumentsParams) error {
 	_, err := q.db.Exec(ctx, updateKycDocuments, arg.UserID, arg.IdentityDoc, arg.ProofOfAddress)
 	return err
+}
+
+const userHasActiveKYCProfile = `-- name: UserHasActiveKYCProfile :one
+select
+    exists (
+        select
+            1
+        from
+            kyc_records
+        where
+            user_id = $1
+            and (status in ('pending', 'verified', 'verifying'))
+    )
+`
+
+func (q *Queries) UserHasActiveKYCProfile(ctx context.Context, userID *string) (bool, error) {
+	row := q.db.QueryRow(ctx, userHasActiveKYCProfile, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const verifyKyc = `-- name: VerifyKyc :exec

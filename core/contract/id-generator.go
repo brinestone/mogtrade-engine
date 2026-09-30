@@ -1,3 +1,3 @@
 package contract
 
-type IdGeneratorFunc func() string
+type IdFactory func() string

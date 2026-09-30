@@ -1,3 +1,15 @@
+-- name: UserHasActiveKYCProfile :one
+select
+    exists (
+        select
+            1
+        from
+            kyc_records
+        where
+            user_id = $1
+            and (status in ('pending', 'verified', 'verifying'))
+    );
+
 -- name: ListKycsByRiskProfile :many
 select
     k.*,

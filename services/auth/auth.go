@@ -58,6 +58,10 @@ var (
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 )
 
+func UserExistsWithId(ctx context.Context, q *db.Queries, id string) (bool, error) {
+	return q.UserExistsWithId(ctx, id)
+}
+
 func RotateAccessToken(ctx context.Context, q *db.Queries, te contract.TokenEncoder, r RotateAccessTokenInput) (SignInResult, error) {
 	row, err := q.LookupRefreshTokenByDevice(ctx, db.LookupRefreshTokenByDeviceParams{DeviceID: r.DeviceId, TokenHash: r.Hash})
 	if err != nil {
@@ -105,7 +109,7 @@ func RotateAccessToken(ctx context.Context, q *db.Queries, te contract.TokenEnco
 	return SignInResult{AccessToken: newAccessToken, RefreshToken: newRefresh}, nil
 }
 
-func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.IdGeneratorFunc, csi CredentialSignUpInput) (SignUpResult, error) {
+func SignUpUserByCredentials(ctx context.Context, q *db.Queries, idg contract.IdFactory, csi CredentialSignUpInput) (SignUpResult, error) {
 	exists, err := q.CredentialAccountExistsByIdentifier(ctx, csi.Identifier)
 	if err != nil {
 		return SignUpResult{}, err
