@@ -37,10 +37,12 @@ func (k *KYC) MountV1(r *gin.RouterGroup) {
 	secured.POST("/", k.handleBeginKyc)
 }
 
-func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries) *KYC {
+func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store contract.ObjectStorage, eb contract.EventBus) *KYC {
 	return &KYC{
 		logger: l.With("controller", "kyc"),
 		pool:   p,
 		q:      q,
+		store:  store,
+		eb:     eb,
 	}
 }

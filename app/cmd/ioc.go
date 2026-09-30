@@ -23,6 +23,7 @@ import (
 	"github.com/brinestone/mogtrade/infra/events"
 	"github.com/brinestone/mogtrade/infra/mail"
 	"github.com/brinestone/mogtrade/infra/sources"
+	"github.com/brinestone/mogtrade/infra/storage"
 	"github.com/brinestone/mogtrade/services/jobs"
 	"github.com/brinestone/mogtrade/services/market"
 	"github.com/brinestone/mogtrade/services/matching"
@@ -93,6 +94,15 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters(ctx context.Context) error {
+	err := ioc.Factory(func() (contract.ObjectStorage, error) {
+		accessKey, secret, endpoint, region := os.Getenv("MINIO_ACCESS_KEY"), os.Getenv("MINIO_SECRET"), os.Getenv("MINIO_ORIGIN"), os.Getenv("MINIO_REGION")
+		return storage.NewMinIOObjectStorage(accessKey, secret, storage.MinIOConfig{
+			Endpoint: endpoint,
+			UseSsl:   strings.HasPrefix(endpoint, "https"),
+			Bucket:   "mogtrade",
+			Region:   region,
+		})
+	})
 	ioc.Factory(func(l *slog.Logger) contract.CurrencyConverter {
 		cc := sources.NewCachedCurrencyConverter(sources.CurrencyConverterConfig{
 			TTLSeconds:  int64((time.Minute * 5).Seconds()),
@@ -106,7 +116,7 @@ func setupAdapters(ctx context.Context) error {
 	}, true)
 	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.TickerInfoProvider { return m })
 	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.ExchangeInfoProvider { return m })
-	err := ioc.Factory(func() (mail.Mailer, error) {
+	err = ioc.Factory(func() (mail.Mailer, error) {
 		sender := os.Getenv("MAILTRAP_API_KEY")
 		senderName := "MogTrade"
 		mailer, err := mail.NewMailtrapMailer(sender, senderName, func() string {
