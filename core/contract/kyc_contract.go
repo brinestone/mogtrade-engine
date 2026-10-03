@@ -1,5 +1,7 @@
 package contract
 
+import "time"
+
 // KYCStatus represents the verification status of a KYC record.
 type KYCStatus string
 
@@ -46,17 +48,27 @@ type ProofOfAddressDocument struct {
 
 // KYCRecord contains the KYC verification data for a user.
 type KYCRecord struct {
-	ID              string
-	UserID          string
-	Status          KYCStatus
-	RiskProfile     KYCRiskProfile
-	VerifiedAt      *string // ISO 8601 or nil
-	ExpiresAt       *string // ISO 8601 or nil
-	Usable          bool
-	IdentityDoc     IdentityDocument
-	ProofOfAddress  ProofOfAddressDocument
-	CreatedAt       string
-	UpdatedAt       string
-	VerifiedBy      string // admin user ID who performed verification
-	RejectionReason string // if status == rejected
+	ID                 string
+	VerificationWindow string
+	UserID             string
+	Status             KYCStatus
+	RiskProfile        KYCRiskProfile
+	VerifiedAt         *string // ISO 8601 or nil
+	ExpiresAt          *string // ISO 8601 or nil
+	Usable             bool
+	IdentityDoc        IdentityDocument
+	ProofOfAddress     ProofOfAddressDocument
+	CreatedAt          string
+	UpdatedAt          string
+	VerifiedBy         string // admin user ID who performed verification
+	RejectionReason    string // if status == rejected
+}
+
+type LookupKycRecord struct {
+	ID           string
+	UserID       string
+	Status       KYCStatus
+	ExpiresAt    time.Time
+	VerifyBefore time.Time
+	Usable       bool
 }

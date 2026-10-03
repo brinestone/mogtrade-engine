@@ -154,9 +154,9 @@ func (w *Wallets) createUserWallets(c *gin.Context) error {
 }
 
 func (w *Wallets) MountV1(r *gin.RouterGroup) {
-	authMiddleware := helpers.ProvideAuthMiddleware()
+	jwtMiddleware := helpers.ProvideJWTMiddleware()
 
-	secured := r.Group("/wallet", authMiddleware)
+	secured := r.Group("/wallet", jwtMiddleware())
 	secured.GET("/status/:type", w.handleGetBalance)
 }
 

@@ -26,6 +26,10 @@ func (m *MinIOStorage) GeneratePresignedUploadURL(ctx context.Context, params co
 		params.Bucket = m.Bucket
 	}
 
+	if err := m.assertBucket(ctx, params.Bucket); err != nil {
+		return "", err
+	}
+
 	if len(params.ContentType) == 0 {
 		params.ContentType = append(params.ContentType, "application/octet-stream")
 	}
@@ -66,7 +70,7 @@ func (m *MinIOStorage) Upload(ctx context.Context, objectName string, src io.Rea
 	if objectName == "" {
 		objectName = generateObjectName()
 	}
-	if err := m.assertBucket(ctx); err != nil {
+	if err := m.assertBucket(ctx, m.Bucket); err != nil {
 		return "", err
 	}
 
@@ -90,8 +94,8 @@ func (m *MinIOStorage) detectContentType(src io.Reader) string {
 	return http.DetectContentType(buf)
 }
 
-func (m *MinIOStorage) assertBucket(ctx context.Context) error {
-	if err := m.client.MakeBucket(ctx, m.Bucket, minio.MakeBucketOptions{}); err != nil {
+func (m *MinIOStorage) assertBucket(ctx context.Context, bucket string) error {
+	if err := m.client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
 		exists, errBucketExists := m.client.BucketExists(ctx, m.Bucket)
 		if errBucketExists != nil && !exists {
 			return err

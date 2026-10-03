@@ -26,52 +26,37 @@ type KYC struct {
 	eb     contract.EventBus
 }
 
-type beginKycPayload struct {
-	Dob           time.Time       `json:"dateOfBirth" form:"dateOfBirth" binding:"required" time_format:"2006-01-02"`
-	City          string          `json:"city" form:"city" binding:"required"`
-	State         string          `json:"state" form:"state" binding:"required"`
-	Gender        contract.Gender `json:"gender" form:"gender" binding:"required"`
-	Selfie        string          `json:"selfie" form:"selfie" binding:"required"`
-	Country       string          `json:"country" form:"country" binding:"required"`
-	ClientId      string          `json:"clientId" form:"clientId" binding:"required"`
-	LegalNames    string          `json:"legalNames" form:"legalNames" binding:"required"`
-	DocumentBack  string          `json:"docBack" form:"docBack" binding:"required"`
-	AddressLine1  string          `json:"addressLine1" form:"addressLine1" binding:"required"`
-	AddressLine2  *string         `json:"addressLine2" form:"addressLine2" binding:"omitempty"`
-	DocumentFront string          `json:"docFront" form:"docFront" binding:"required"`
-	PhoneNumber   string          `json:"phoneNumber" form:"phoneNumber" binding:"required,phone"`
-}
-
 func (k *KYC) handleBeginKyc(c *gin.Context) {
-	var payload beginKycPayload
-	if err := c.ShouldBind(&payload); err != nil {
-		msgs := strings.Split(err.Error(), "\n")
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": msgs, "code": "BAD_REQUEST"})
-		return
-	}
-
 	k.logger.Debug("opening database transaction")
-	if err := helpers.WithTransaction(c.Request.Context(), func(tx pgx.Tx) error {
+	row, err := helpers.WithValueTransaction(c.Request.Context(), func(tx pgx.Tx) (db.LookupActiveKycForUserRow, error) {
 		return kyc.CreateRecord(c.Request.Context(), k.q.WithTx(tx), kyc.CreateParams{
 			ID:     k.idg(),
 			UserID: helpers.GetCurrentUserId(c),
 		})
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, kyc.ErrKycAlreadyExists) {
+			k.logger.Warn("kyc record already exists for user, skipping", "uid", helpers.GetCurrentUserId(c))
 			c.Status(http.StatusProcessing)
 			return
 		}
+		k.logger.Error("could not create kyc flow", "err", err.Error())
 		helpers.InternalServerError(c)
 		return
 	}
 
+	println(row.VerifyBefore.Time.String())
+	c.JSON(http.StatusOK, gin.H{
+		"expiresAt": row.VerifyBefore.Time.UTC().Format(time.RFC3339),
+	})
 }
 
 // GeneratePresignedUploadURL generates a presigned URL for uploading KYC documents
 // to the MinIO bucket. The URL expires after the specified duration and only allows
 // the specified content types (e.g., image/jpeg, image/png, application/pdf).
 func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
-	exists, err := k.q.UserHasActiveKYCProfile(c.Request.Context(), new(helpers.GetCurrentUserId(c)))
+	uid := helpers.GetCurrentUserIdOrDefault(c, fmt.Sprintf("anonymous-%s", c.ClientIP()))
+	exists, err := k.q.UserHasActiveKYCProfile(c.Request.Context(), new(uid))
 	if err != nil {
 		k.logger.Error("could not find user's active kyc profile", "uid", helpers.GetCurrentUserId(c), "err", err.Error())
 		helpers.InternalServerError(c)
@@ -83,20 +68,29 @@ func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
 	}
 	// Get the document type from query parameter (front, back, selfie, proof_of_address)
 	docTypes := strings.Split(c.Query("types"), ",")
-	if len(docTypes) == 0 {
+	if len(docTypes) == 0 || (len(docTypes) == 1 && docTypes[0] == "") {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing types parameter", "code": "BAD_REQUEST"})
 		return
 	}
 
 	result := make(map[string]any)
+	validDocTypes := []string{"selfie", "back", "front", "proof_of_address"}
+	invalidDocTypes := helpers.SliceDiff(docTypes, validDocTypes)
+	if len(invalidDocTypes) > 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("invalid document types: \"%s\". document type must be among: \"%s\"", strings.Join(invalidDocTypes, ", "), strings.Join(validDocTypes, ", ")),
+		})
+		return
+	}
+
 	// Set allowed content types based on document type
 	for _, docType := range docTypes {
 		var allowedContentTypes []string
 		switch docType {
 		case "front":
-			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
+			allowedContentTypes = []string{"image/jpeg", "image/png"}
 		case "back":
-			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
+			allowedContentTypes = []string{"image/jpeg", "image/png"}
 		case "selfie":
 			allowedContentTypes = []string{"image/jpeg", "image/png"}
 		case "proof_of_address":
@@ -105,7 +99,7 @@ func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
 			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
 		}
 
-		objectName := fmt.Sprintf("kyc/%s/%s-%s", helpers.GetCurrentUserId(c), docType, time.Now().Format("20060102150405"))
+		objectName := fmt.Sprintf("kyc/%s/%s-%s", uid, docType, time.Now().Format("20060102150405"))
 		expires := time.Hour * 24
 		url, err := k.store.GeneratePresignedUploadURL(c.Request.Context(), contract.PresignUrlParams{
 			ContentType: allowedContentTypes,
@@ -122,8 +116,8 @@ func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
 			"url":          url,
 			"objectName":   objectName,
 			"expiresAt":    time.Now().UTC().Add(expires).Unix(),
-			"docType":      docType,
 			"allowedTypes": allowedContentTypes,
+			"httpMethod":   "PUT",
 		}
 	}
 
@@ -136,12 +130,13 @@ func (k *KYC) MountV1(r *gin.RouterGroup) {
 	// authOnly := router.Group("", helpers.ProvideAuthMiddleware())
 
 	kycMiddleware := helpers.ProvideKYCMiddleware()
-	secured := router.Group("", helpers.ProvideAuthMiddleware(), kycMiddleware(contract.KYCPending))
-	secured.POST("", k.handleBeginKyc)
+	jwtMiddleware := helpers.ProvideJWTMiddleware()
+	secured := router.Group("", jwtMiddleware(false), kycMiddleware(contract.KYCPending))
+	secured.GET("", k.handleBeginKyc)
 
 	// Public endpoint for generating presigned URLs for KYC document uploads
 	public := router.Group("")
-	public.GET("presigned-upload", k.handleGeneratePresignedUploadURL)
+	public.GET("presigned-upload", jwtMiddleware(true), k.handleGeneratePresignedUploadURL)
 }
 
 func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store contract.ObjectStorage, eb contract.EventBus, idg contract.IdFactory) *KYC {

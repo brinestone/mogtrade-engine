@@ -30,8 +30,8 @@ func NewUserController(l *slog.Logger, p *pgxpool.Pool) *User {
 }
 
 func (c *User) MountV1(r *gin.RouterGroup) {
-	requireAuth := helpers.ProvideAuthMiddleware()
-	router := r.Group("/user", requireAuth)
+	jwtMiddleware := helpers.ProvideJWTMiddleware()
+	router := r.Group("/user", jwtMiddleware(false))
 	router.GET("/prefs", c.handleGetPrefs)
 	router.PUT("/prefs", c.handleUpsertPrefs)
 }

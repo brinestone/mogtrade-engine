@@ -9,15 +9,18 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sgin "github.com/getsentry/sentry-go/gin"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/web/controller"
 	"github.com/brinestone/mogtrade/web/middleware"
+	"github.com/brinestone/mogtrade/web/validators"
 	"github.com/danielkov/gin-helmet/ginhelmet"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"go-slim.dev/ioc"
@@ -75,7 +78,7 @@ func SetupControllers() error {
 }
 
 func SetupMiddlewares() {
-	ioc.NamedFactory("middleware.auth", middleware.RequireAuth)
+	ioc.NamedFactory("middleware.jwt", middleware.RequireAuth)
 	ioc.NamedFactory("middleware.kyc", middleware.RequireKycVerified)
 }
 
@@ -102,5 +105,16 @@ func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
 			panic(err)
 		}
 		e.Use(sgin.New(sgin.Options{Repanic: true}))
+	}
+}
+
+func RegisterCustomValidators() {
+	validators := validators.NewRequestValidator()
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		for tag, function := range validators.Validators() {
+			if err := v.RegisterValidation(tag, function); err != nil {
+				panic(err)
+			}
+		}
 	}
 }
