@@ -7,24 +7,44 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type MinIOStorage struct {
-	MinIOConfig
+	StorageConfig
 	client *minio.Client
 }
-type MinIOConfig struct {
-	Endpoint string
-	UseSsl   bool
-	Region   string
-	Bucket   string
-}
 
+func (m *MinIOStorage) GeneratePresignedUploadURL(ctx context.Context, params contract.PresignUrlParams) (string, error) {
+	if params.Bucket == "" {
+		params.Bucket = m.Bucket
+	}
+
+	if len(params.ContentType) == 0 {
+		params.ContentType = append(params.ContentType, "application/octet-stream")
+	}
+
+	if params.ObjectName == "" {
+		params.ObjectName = generateObjectName()
+	}
+
+	if params.Window <= 0 {
+		params.Window = time.Second
+	}
+
+	params.Window = time.Duration(math.Min(float64(time.Hour*168), float64(params.Window)))
+	url, err := m.client.PresignedPutObject(ctx, params.Bucket, params.ObjectName, params.Window)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
+}
 func (m *MinIOStorage) ComputeSHA256(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
@@ -42,16 +62,15 @@ func (m *MinIOStorage) Download(ctx context.Context, objectName string) (io.Read
 	return m.client.GetObject(ctx, m.Bucket, objectName, minio.GetObjectOptions{})
 }
 
-func (m *MinIOStorage) Upload(ctx context.Context, path string, src io.ReadSeeker) (string, error) {
-	buf := make([]byte, 20)
-	rand.Read(buf)
-	objectName := hex.EncodeToString(buf)
+func (m *MinIOStorage) Upload(ctx context.Context, objectName string, src io.ReadSeeker) (string, error) {
+	if objectName == "" {
+		objectName = generateObjectName()
+	}
 	if err := m.assertBucket(ctx); err != nil {
 		return "", err
 	}
 
-	sample := make([]byte, 512)
-	contentType := m.detectContentType(sample)
+	contentType := m.detectContentType(src)
 	src.Seek(0, io.SeekStart)
 
 	_, err := m.client.PutObject(ctx, m.Bucket, objectName, src, -1, minio.PutObjectOptions{
@@ -64,8 +83,11 @@ func (m *MinIOStorage) Upload(ctx context.Context, path string, src io.ReadSeeke
 	return fmt.Sprintf("%s/%s/%s", m.Endpoint, m.Bucket, objectName), nil
 }
 
-func (m *MinIOStorage) detectContentType(src []byte) string {
-	return http.DetectContentType(src)
+func (m *MinIOStorage) detectContentType(src io.Reader) string {
+	l := 512
+	var buf []byte = make([]byte, l)
+	src.Read(buf)
+	return http.DetectContentType(buf)
 }
 
 func (m *MinIOStorage) assertBucket(ctx context.Context) error {
@@ -77,8 +99,13 @@ func (m *MinIOStorage) assertBucket(ctx context.Context) error {
 	}
 	return nil
 }
+func generateObjectName() string {
+	buf := make([]byte, 20)
+	rand.Read(buf)
+	return fmt.Sprintf("def_%s", hex.EncodeToString(buf))
+}
 
-func NewMinIOObjectStorage(accessKey, secretKey string, cfg MinIOConfig) (*MinIOStorage, error) {
+func NewMinIOObjectStorage(accessKey, secretKey string, cfg StorageConfig) (*MinIOStorage, error) {
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: cfg.UseSsl,
@@ -88,7 +115,7 @@ func NewMinIOObjectStorage(accessKey, secretKey string, cfg MinIOConfig) (*MinIO
 		return nil, err
 	}
 	return &MinIOStorage{
-		client:      client,
-		MinIOConfig: cfg,
+		client:        client,
+		StorageConfig: cfg,
 	}, nil
 }
