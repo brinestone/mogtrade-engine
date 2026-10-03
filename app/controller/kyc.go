@@ -56,16 +56,6 @@ func (k *KYC) handleBeginKyc(c *gin.Context) {
 // the specified content types (e.g., image/jpeg, image/png, application/pdf).
 func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
 	uid := helpers.GetCurrentUserIdOrDefault(c, fmt.Sprintf("anonymous-%s", c.ClientIP()))
-	exists, err := k.q.UserHasActiveKYCProfile(c.Request.Context(), new(uid))
-	if err != nil {
-		k.logger.Error("could not find user's active kyc profile", "uid", helpers.GetCurrentUserId(c), "err", err.Error())
-		helpers.InternalServerError(c)
-		return
-	} else if exists {
-		k.logger.Warn("user already has an active kyc profile. skipping", "uid", helpers.GetCurrentUserId(c))
-		c.Status(http.StatusOK)
-		return
-	}
 	// Get the document type from query parameter (front, back, selfie, proof_of_address)
 	docTypes := strings.Split(c.Query("types"), ",")
 	if len(docTypes) == 0 || (len(docTypes) == 1 && docTypes[0] == "") {
@@ -124,15 +114,18 @@ func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (k *KYC) handleGetPendingRequirements(c *gin.Context) {
+
+}
+
 func (k *KYC) MountV1(r *gin.RouterGroup) {
 	router := r.Group("/kyc")
 
-	// authOnly := router.Group("", helpers.ProvideAuthMiddleware())
-
 	kycMiddleware := helpers.ProvideKYCMiddleware()
 	jwtMiddleware := helpers.ProvideJWTMiddleware()
-	secured := router.Group("", jwtMiddleware(false), kycMiddleware(contract.KYCPending))
-	secured.GET("", k.handleBeginKyc)
+	secured := router.Group("", jwtMiddleware(false))
+	secured.GET("", kycMiddleware(contract.KYCPending), k.handleBeginKyc)
+	secured.GET("pending", kycMiddleware(contract.KYCPending), k.handleGetPendingRequirements)
 
 	// Public endpoint for generating presigned URLs for KYC document uploads
 	public := router.Group("")
