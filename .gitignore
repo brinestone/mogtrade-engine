@@ -9,3 +9,4 @@ __debug*
 node_modules
 mcp/build/
 .pi/tasks/
+.pi/git-worktrees/

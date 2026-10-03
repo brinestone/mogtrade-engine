@@ -3,7 +3,15 @@ package contract
 import (
 	"context"
 	"io"
+	"time"
 )
+
+type PresignUrlParams struct {
+	Bucket      string
+	ObjectName  string
+	ContentType []string
+	Window      time.Duration
+}
 
 // ObjectStorage defines the interface for object storage operations.
 type ObjectStorage interface {
@@ -17,4 +25,8 @@ type ObjectStorage interface {
 	Exists(ctx context.Context, path string) (bool, error)
 	// ComputeSHA256 calculates the SHA256 hash of the data.
 	ComputeSHA256(data []byte) string
+	// GeneratePresignedUploadURL generates a presigned URL for uploading an object
+	// with content type validation. The urlExpires after the specified duration.
+	// allowedContentTypes specifies the MIME types that are allowed for the upload.
+	GeneratePresignedUploadURL(ctx context.Context, params PresignUrlParams) (string, error)
 }

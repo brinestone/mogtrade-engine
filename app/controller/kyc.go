@@ -2,10 +2,9 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,11 +24,6 @@ type KYC struct {
 	store  contract.ObjectStorage
 	idg    contract.IdFactory
 	eb     contract.EventBus
-	UploadLimits
-}
-
-type UploadLimits struct {
-	maxUpload int64
 }
 
 type beginKycPayload struct {
@@ -73,26 +67,90 @@ func (k *KYC) handleBeginKyc(c *gin.Context) {
 
 }
 
+// GeneratePresignedUploadURL generates a presigned URL for uploading KYC documents
+// to the MinIO bucket. The URL expires after the specified duration and only allows
+// the specified content types (e.g., image/jpeg, image/png, application/pdf).
+func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
+	exists, err := k.q.UserHasActiveKYCProfile(c.Request.Context(), new(helpers.GetCurrentUserId(c)))
+	if err != nil {
+		k.logger.Error("could not find user's active kyc profile", "uid", helpers.GetCurrentUserId(c), "err", err.Error())
+		helpers.InternalServerError(c)
+		return
+	} else if exists {
+		k.logger.Warn("user already has an active kyc profile. skipping", "uid", helpers.GetCurrentUserId(c))
+		c.Status(http.StatusOK)
+		return
+	}
+	// Get the document type from query parameter (front, back, selfie, proof_of_address)
+	docTypes := strings.Split(c.Query("types"), ",")
+	if len(docTypes) == 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing types parameter", "code": "BAD_REQUEST"})
+		return
+	}
+
+	result := make(map[string]any)
+	// Set allowed content types based on document type
+	for _, docType := range docTypes {
+		var allowedContentTypes []string
+		switch docType {
+		case "front":
+			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
+		case "back":
+			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
+		case "selfie":
+			allowedContentTypes = []string{"image/jpeg", "image/png"}
+		case "proof_of_address":
+			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
+		default:
+			allowedContentTypes = []string{"image/jpeg", "image/png", "application/pdf"}
+		}
+
+		objectName := fmt.Sprintf("kyc/%s/%s-%s", helpers.GetCurrentUserId(c), docType, time.Now().Format("20060102150405"))
+		expires := time.Hour * 24
+		url, err := k.store.GeneratePresignedUploadURL(c.Request.Context(), contract.PresignUrlParams{
+			ContentType: allowedContentTypes,
+			ObjectName:  objectName,
+			Window:      expires,
+		})
+		if err != nil {
+			k.logger.Error("could not generate presigned url", "documentType", docType, "err", err.Error())
+			helpers.InternalServerError(c)
+			return
+		}
+
+		result[docType] = gin.H{
+			"url":          url,
+			"objectName":   objectName,
+			"expiresAt":    time.Now().UTC().Add(expires).Unix(),
+			"docType":      docType,
+			"allowedTypes": allowedContentTypes,
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 func (k *KYC) MountV1(r *gin.RouterGroup) {
 	router := r.Group("/kyc")
+
+	// authOnly := router.Group("", helpers.ProvideAuthMiddleware())
 
 	kycMiddleware := helpers.ProvideKYCMiddleware()
 	secured := router.Group("", helpers.ProvideAuthMiddleware(), kycMiddleware(contract.KYCPending))
 	secured.POST("", k.handleBeginKyc)
+
+	// Public endpoint for generating presigned URLs for KYC document uploads
+	public := router.Group("")
+	public.GET("presigned-upload", k.handleGeneratePresignedUploadURL)
 }
 
 func NewKycController(l *slog.Logger, p *pgxpool.Pool, q *db.Queries, store contract.ObjectStorage, eb contract.EventBus, idg contract.IdFactory) *KYC {
-	maxUploadSize, err := strconv.Atoi(os.Getenv("MAX_UPLOAD_LIMIT"))
-	if err != nil {
-		panic(err)
-	}
 	return &KYC{
-		logger:       l.With("controller", "kyc"),
-		pool:         p,
-		q:            q,
-		UploadLimits: UploadLimits{maxUpload: int64(maxUploadSize)},
-		eb:           eb,
-		store:        store,
-		idg:          idg,
+		logger: l.With("controller", "kyc"),
+		pool:   p,
+		q:      q,
+		eb:     eb,
+		store:  store,
+		idg:    idg,
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/url"
@@ -95,14 +96,32 @@ func setupDbConnection(ctx context.Context) error {
 
 func setupAdapters(ctx context.Context) error {
 	err := ioc.Factory(func() (contract.ObjectStorage, error) {
-		accessKey, secret, endpoint, region := os.Getenv("MINIO_ACCESS_KEY"), os.Getenv("MINIO_SECRET"), os.Getenv("MINIO_ORIGIN"), os.Getenv("MINIO_REGION")
-		return storage.NewMinIOObjectStorage(accessKey, secret, storage.MinIOConfig{
-			Endpoint: endpoint,
-			UseSsl:   strings.HasPrefix(endpoint, "https"),
-			Bucket:   "mogtrade",
-			Region:   region,
-		})
+		p, accessKey, secret, endpoint, region := os.Getenv("S3_PLATFORM"), os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET"), os.Getenv("S3_ORIGIN"), os.Getenv("S3_REGION")
+
+		platform := storage.StoragePlatform(p)
+
+		switch platform {
+		case storage.StoragePlatformMinio:
+			return storage.NewMinIOObjectStorage(accessKey, secret, storage.StorageConfig{
+				Endpoint: endpoint,
+				UseSsl:   strings.HasPrefix(endpoint, "https"),
+				Bucket:   "mogtrade",
+				Region:   region,
+			})
+		case storage.StoragePlatformS3:
+			return storage.NewS3Storage(accessKey, secret, storage.StorageConfig{
+				Endpoint: endpoint,
+				UseSsl:   strings.HasPrefix(endpoint, "https"),
+				Region:   region,
+				Bucket:   "mogtrade",
+			})
+		default:
+			return nil, fmt.Errorf("the S3_PLATFORM variable is not defined and must be either s3 or minio")
+		}
 	})
+	if err != nil {
+		return err
+	}
 	ioc.Factory(func(l *slog.Logger) contract.CurrencyConverter {
 		cc := sources.NewCachedCurrencyConverter(sources.CurrencyConverterConfig{
 			TTLSeconds:  int64((time.Minute * 5).Seconds()),
