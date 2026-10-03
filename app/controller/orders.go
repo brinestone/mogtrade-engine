@@ -202,14 +202,14 @@ func (o *Orders) handleFindOrders(ctx *gin.Context) {
 	})
 }
 func (c *Orders) MountV1(r *gin.RouterGroup) {
-	authMiddleware := helpers.ProvideAuthMiddleware()
+	jwtMiddleware := helpers.ProvideJWTMiddleware()
 	kycMiddleware := helpers.ProvideKYCMiddleware()
 
 	router := r.Group("/orders")
 	public := router.Group("")
 	public.GET("", c.handleFindOrders)
 
-	secured := router.Group("", authMiddleware)
+	secured := router.Group("", jwtMiddleware())
 	secured.POST("", kycMiddleware(contract.KYCVerified), c.handlePlaceOrder)
 	c.subscribeToEventsV1()
 }

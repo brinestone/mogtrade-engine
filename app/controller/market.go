@@ -48,8 +48,8 @@ func (c *Market) handlePullLiveFeed(ctx *gin.Context) {
 }
 
 func (c *Market) MountV1(r *gin.RouterGroup) {
-	authMiddleware := helpers.ProvideAuthMiddleware()
-	router := r.Group("/market", authMiddleware)
+	jwtMiddleware := helpers.ProvideJWTMiddleware()
+	router := r.Group("/market", jwtMiddleware())
 	router.GET("/feed", c.handlePullLiveFeed)
 }
 

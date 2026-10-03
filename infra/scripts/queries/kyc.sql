@@ -8,6 +8,7 @@ select
         where
             user_id = $1
             and (status in ('pending', 'verified', 'verifying'))
+            and (created_at + verification_window > now())
     );
 
 -- name: ListKycsByRiskProfile :many
@@ -18,7 +19,8 @@ select
         k.status = 'verified'
         and now() <= (k.created_at + k.valid_window),
         false
-    )::boolean as usable
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
 from
     kyc_records k
 where
@@ -34,7 +36,8 @@ select
         k.status = 'verified'
         and now() <= (k.created_at + k.valid_window),
         false
-    )::boolean as usable
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
 from
     kyc_records k
 order by
@@ -80,7 +83,8 @@ set
     rejection_reason = null,
     risk_profile = $3
 where
-    user_id = $1;
+    user_id = $1
+    and status not in ('expired', 'rejected');
 
 -- name: RejectKyc :exec
 update kyc_records
@@ -91,17 +95,22 @@ set
     rejection_reason = $3,
     verified_at = null
 where
-    user_id = $1;
+    user_id = $1
+    and status not in ('expired', 'rejected');
 
--- name: GetKycRecordByUser :one
+-- name: LookupKycRecordByUser :one
 select
-    k.*,
+    k.id,
+    k.user_id,
+    k.status,
+    k.ready,
     (k.created_at + k.valid_window)::timestamptz as expires_at,
     coalesce(
         k.status = 'verified'
         and now() <= (k.created_at + k.valid_window),
         false
-    )::boolean as usable
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
 from
     kyc_records k
 where
@@ -109,14 +118,29 @@ where
 limit
     1;
 
+-- name: LookupActiveKycForUser :one
+select
+    k.id,
+    k.user_id,
+    k.status,
+    k.ready,
+    (k.created_at + k.valid_window)::timestamptz as expires_at,
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
+from
+    kyc_records k
+where
+    k.user_id = $1
+    and status not in ('expired', 'rejected')
+limit
+    1;
+
 -- name: CreateKycRecord :exec
 insert into
-    kyc_records (
-        id,
-        valid_window,
-        identity_doc,
-        proof_of_address,
-        user_id
-    )
+    kyc_records (id, valid_window, user_id, verification_window)
 values
-    ($1, $2, $3, $4, $5);
+    ($1, $2, $3, $4);

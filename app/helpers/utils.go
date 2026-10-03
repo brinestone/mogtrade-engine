@@ -35,6 +35,48 @@ func WithTransaction(ctx context.Context, handler TransactionHandler) error {
 	}
 }
 
+type ValueTransactionHandler[T any] func(pgx.Tx) (T, error)
+
+func WithValueTransaction[T any](ctx context.Context, handler ValueTransactionHandler[T]) (T, error) {
+	var zero T
+	pool, err := ioc.Get[*pgxpool.Pool](ctx)
+	if err != nil {
+		return zero, err
+	}
+	tx, err := (*pool).Begin(ctx)
+	if err != nil {
+		return zero, err
+	}
+	defer tx.Rollback(ctx)
+
+	res, err := handler(tx)
+	if err != nil {
+		return zero, err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return zero, err
+	}
+	return res, nil
+}
+
 func InternalServerError(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+}
+
+// SliceDiff returns elements in 'a' that are not in 'b'
+func SliceDiff[T comparable](a, b []T) []T {
+	bMap := make(map[T]struct{}, len(b))
+	for _, val := range b {
+		bMap[val] = struct{}{}
+	}
+
+	var diff []T
+	for _, val := range a {
+		if _, found := bMap[val]; !found {
+			diff = append(diff, val)
+		}
+	}
+
+	return diff
 }

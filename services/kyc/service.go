@@ -30,12 +30,10 @@ var (
 )
 
 type CreateParams struct {
-	ID               string
-	UserID           string
-	IdempotencyToken string
-	ValidWindow      time.Duration
-	IdentityDoc      contract.IdentityDocument
-	ProofOfAddress   contract.ProofOfAddressDocument
+	ID                 string
+	UserID             string
+	ValidWindow        time.Duration
+	VerificationWindow time.Duration
 }
 
 type UpdateDocumentsParams struct {
@@ -62,52 +60,50 @@ type SetStatusParams struct {
 }
 
 // CreateRecord inserts a pending KYC application for the user.
-func CreateRecord(ctx context.Context, q *db.Queries, p CreateParams) error {
+func CreateRecord(ctx context.Context, q *db.Queries, p CreateParams) (db.LookupActiveKycForUserRow, error) {
 	if p.UserID == "" {
-		return ErrEmptyUserID
+		return db.LookupActiveKycForUserRow{}, ErrEmptyUserID
 	}
 	window := p.ValidWindow
 	if window <= 0 {
 		window = DefaultValidWindow
 	}
-	identity, err := json.Marshal(p.IdentityDoc)
-	if err != nil {
-		return fmt.Errorf("marshal identity doc: %w", err)
-	}
-	address, err := json.Marshal(p.ProofOfAddress)
-	if err != nil {
-		return fmt.Errorf("marshal proof of address: %w", err)
-	}
-	recordExists, err := q.UserHasActiveKYCProfile(ctx, &p.UserID)
-	if err != nil {
-		return err
-	}
-	if recordExists {
-		return ErrKycAlreadyExists
-	}
-	err = q.CreateKycRecord(ctx, db.CreateKycRecordParams{
-		ID:             p.ID,
-		ValidWindow:    window.String(),
-		IdentityDoc:    identity,
-		ProofOfAddress: address,
-		UserID:         &p.UserID,
-	})
 
-	return err
+	if p.VerificationWindow == 0 {
+		p.VerificationWindow = 24 * time.Hour
+	}
+	activeRecord, err := q.LookupActiveKycForUser(ctx, &p.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			err := q.CreateKycRecord(ctx, db.CreateKycRecordParams{
+				ID:                 p.ID,
+				ValidWindow:        window.String(),
+				UserID:             &p.UserID,
+				VerificationWindow: p.VerificationWindow.String(),
+			})
+			if err != nil {
+				return db.LookupActiveKycForUserRow{}, err
+			}
+			return q.LookupActiveKycForUser(ctx, &p.UserID)
+		}
+	}
+
+	return activeRecord, nil
 }
 
 // GetByUser returns the KYC record for a user.
-func GetByUser(ctx context.Context, q *db.Queries, userID string) (contract.KYCRecord, error) {
+func GetByUser(ctx context.Context, q *db.Queries, userID string) (contract.LookupKycRecord, error) {
 	if userID == "" {
-		return contract.KYCRecord{}, ErrEmptyUserID
+		return contract.LookupKycRecord{}, ErrEmptyUserID
 	}
-	row, err := q.GetKycRecordByUser(ctx, &userID)
+	row, err := q.LookupKycRecordByUser(ctx, &userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return contract.KYCRecord{}, ErrKycNotFound
+			return contract.LookupKycRecord{}, ErrKycNotFound
 		}
-		return contract.KYCRecord{}, err
+		return contract.LookupKycRecord{}, err
 	}
+
 	return mapGetRow(row)
 }
 
@@ -186,12 +182,12 @@ func SetStatus(ctx context.Context, q *db.Queries, p SetStatusParams) error {
 }
 
 // List returns all KYC records.
-func List(ctx context.Context, q *db.Queries) ([]contract.KYCRecord, error) {
+func List(ctx context.Context, q *db.Queries) ([]contract.LookupKycRecord, error) {
 	rows, err := q.ListKycs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]contract.KYCRecord, 0, len(rows))
+	out := make([]contract.LookupKycRecord, 0, len(rows))
 	for _, row := range rows {
 		rec, err := mapListRow(row)
 		if err != nil {
@@ -203,7 +199,7 @@ func List(ctx context.Context, q *db.Queries) ([]contract.KYCRecord, error) {
 }
 
 // ListByRiskProfile returns KYC records filtered by risk profile.
-func ListByRiskProfile(ctx context.Context, q *db.Queries, profile contract.KYCRiskProfile) ([]contract.KYCRecord, error) {
+func ListByRiskProfile(ctx context.Context, q *db.Queries, profile contract.KYCRiskProfile) ([]contract.LookupKycRecord, error) {
 	dbProfile, err := toDbRiskProfile(profile)
 	if err != nil {
 		return nil, err
@@ -212,7 +208,7 @@ func ListByRiskProfile(ctx context.Context, q *db.Queries, profile contract.KYCR
 	if err != nil {
 		return nil, err
 	}
-	out := make([]contract.KYCRecord, 0, len(rows))
+	out := make([]contract.LookupKycRecord, 0, len(rows))
 	for _, row := range rows {
 		rec, err := mapListByRiskRow(row)
 		if err != nil {
@@ -229,7 +225,7 @@ func StatusClaimForUser(ctx context.Context, q *db.Queries, userID string) (stri
 	if userID == "" {
 		return ClaimStatusAbsent, nil
 	}
-	row, err := q.GetKycRecordByUser(ctx, &userID)
+	row, err := q.LookupKycRecordByUser(ctx, &userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ClaimStatusAbsent, nil
@@ -269,114 +265,44 @@ func toDbStatus(s contract.KYCStatus) (db.KycStatus, error) {
 	}
 }
 
-func mapGetRow(row db.GetKycRecordByUserRow) (contract.KYCRecord, error) {
+func mapGetRow(row db.LookupKycRecordByUserRow) (contract.LookupKycRecord, error) {
 	return mapRecord(
 		row.ID,
-		row.UserID,
-		row.Status,
-		row.RiskProfile,
-		row.VerifiedAt,
-		row.ExpiresAt,
+		*row.UserID,
+		string(row.Status),
+		row.ExpiresAt.Time,
+		row.VerifyBefore.Time,
 		row.Usable,
-		row.IdentityDoc,
-		row.ProofOfAddress,
-		row.CreatedAt,
-		row.UpdatedAt,
-		row.VerifiedBy,
-		row.RejectionReason,
 	)
 }
 
-func mapListRow(row db.ListKycsRow) (contract.KYCRecord, error) {
+func mapListRow(row db.ListKycsRow) (contract.LookupKycRecord, error) {
 	return mapRecord(
 		row.ID,
-		row.UserID,
-		row.Status,
-		row.RiskProfile,
-		row.VerifiedAt,
-		row.ExpiresAt,
+		*row.UserID,
+		string(row.Status),
+		row.ExpiresAt.Time,
+		row.VerifyBefore.Time,
 		row.Usable,
-		row.IdentityDoc,
-		row.ProofOfAddress,
-		row.CreatedAt,
-		row.UpdatedAt,
-		row.VerifiedBy,
-		row.RejectionReason,
 	)
 }
 
-func mapListByRiskRow(row db.ListKycsByRiskProfileRow) (contract.KYCRecord, error) {
+func mapListByRiskRow(row db.ListKycsByRiskProfileRow) (contract.LookupKycRecord, error) {
 	return mapRecord(
-		row.ID,
-		row.UserID,
-		row.Status,
-		row.RiskProfile,
-		row.VerifiedAt,
-		row.ExpiresAt,
-		row.Usable,
-		row.IdentityDoc,
-		row.ProofOfAddress,
-		row.CreatedAt,
-		row.UpdatedAt,
-		row.VerifiedBy,
-		row.RejectionReason,
+		row.ID, *row.UserID, string(row.Status), row.ExpiresAt.Time, row.VerifyBefore.Time, row.Usable,
 	)
 }
 
 func mapRecord(
-	id string,
-	userID *string,
-	status db.KycStatus,
-	risk db.KycRiskProfile,
-	verifiedAt pgtype.Timestamptz,
-	expiresAt pgtype.Timestamptz,
-	usable bool,
-	identityRaw []byte,
-	addressRaw []byte,
-	createdAt pgtype.Timestamptz,
-	updatedAt pgtype.Timestamptz,
-	verifiedBy *string,
-	rejectionReason *string,
-) (contract.KYCRecord, error) {
-	var identity contract.IdentityDocument
-	if len(identityRaw) > 0 {
-		if err := json.Unmarshal(identityRaw, &identity); err != nil {
-			return contract.KYCRecord{}, fmt.Errorf("unmarshal identity doc: %w", err)
-		}
-	}
-	var address contract.ProofOfAddressDocument
-	if len(addressRaw) > 0 {
-		if err := json.Unmarshal(addressRaw, &address); err != nil {
-			return contract.KYCRecord{}, fmt.Errorf("unmarshal proof of address: %w", err)
-		}
-	}
-
-	rec := contract.KYCRecord{
-		ID:             id,
-		Status:         contract.KYCStatus(status),
-		RiskProfile:    contract.KYCRiskProfile(risk),
-		IdentityDoc:    identity,
-		ProofOfAddress: address,
-		CreatedAt:      formatTimestamptz(createdAt),
-		UpdatedAt:      formatTimestamptz(updatedAt),
-		Usable:         usable,
-	}
-	if userID != nil {
-		rec.UserID = *userID
-	}
-	if verifiedAt.Valid {
-		s := verifiedAt.Time.UTC().Format(time.RFC3339)
-		rec.VerifiedAt = &s
-	}
-	if expiresAt.Valid {
-		s := expiresAt.Time.UTC().Format(time.RFC3339)
-		rec.ExpiresAt = &s
-	}
-	if verifiedBy != nil {
-		rec.VerifiedBy = *verifiedBy
-	}
-	if rejectionReason != nil {
-		rec.RejectionReason = *rejectionReason
+	id, userId, status string, expiresAt, verifyBefore time.Time, usable bool,
+) (contract.LookupKycRecord, error) {
+	rec := contract.LookupKycRecord{
+		ID:           id,
+		UserID:       userId,
+		Status:       contract.KYCStatus(status),
+		ExpiresAt:    expiresAt,
+		VerifyBefore: verifyBefore,
+		Usable:       usable,
 	}
 	return rec, nil
 }
