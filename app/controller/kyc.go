@@ -14,8 +14,17 @@ import (
 	"github.com/brinestone/mogtrade/web/helpers"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// formatTimestamptz formats a pgtype.Timestamptz to RFC3339 string
+func formatTimestamptz(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.Time.UTC().Format(time.RFC3339)
+}
 
 type KYC struct {
 	logger *slog.Logger
@@ -115,7 +124,62 @@ func (k *KYC) handleGeneratePresignedUploadURL(c *gin.Context) {
 }
 
 func (k *KYC) handleGetPendingRequirements(c *gin.Context) {
+	userID := helpers.GetCurrentUserId(c)
 
+	// Get KYC record for this user
+	record, err := k.q.LookupKycRecordByUser(c.Request.Context(), &userID)
+	if err != nil {
+		// Convert db errors to user-friendly responses
+		errStr := err.Error()
+		if strings.Contains(errStr, "no rows in result set") || strings.Contains(errStr, "not found") {
+			c.JSON(http.StatusOK, gin.H{
+				"status": "no_kyc_record",
+				"pending": []string{
+					"submit_kyc_application",
+				},
+				"message": "No KYC record found. Please start the KYC verification process.",
+			})
+			return
+		}
+		k.logger.Error("could not retrieve KYC record", "err", err.Error(), "uid", userID)
+		helpers.InternalServerError(c)
+		return
+	}
+
+	// Convert db.KycStatus to contract.KYCStatus string
+	statusStr := string(record.Status)
+
+	// Determine pending requirements based on KYC status
+	var pending []string
+	switch statusStr {
+	case string(contract.KYCPending):
+		// User has started KYC but documents are pending
+		pending = append(pending, "upload_documents")
+	case string(contract.KYCVerified):
+		pending = append(pending, "none") // KYC is complete
+	case string(contract.KYCVerifying):
+		pending = append(pending, "admin_review_in_progress")
+	case string(contract.KYCRejected):
+		pending = append(pending, "resubmit_kyc", "provide_additional_documents")
+	case string(contract.KYCExpired):
+		pending = append(pending, "renew_kyc")
+	default:
+		pending = append(pending, "review_kyc_status")
+	}
+
+	// Format expires date from pgtype.Timestamptz using helper function
+	expiresAt := formatTimestamptz(record.ExpiresAt)
+
+	// Build result
+	result := gin.H{
+		"status":       statusStr,
+		"expiresAt":    expiresAt,
+		"verifyBefore": formatTimestamptz(record.VerifyBefore),
+		"pending":      pending,
+		"isReady":      record.Ready != nil && *record.Ready,
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 func (k *KYC) MountV1(r *gin.RouterGroup) {
