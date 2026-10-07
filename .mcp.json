@@ -4,6 +4,16 @@
       "url": "https://api.githubcopilot.com/mcp",
       "auth": "oauth",
       "protocolVersion": "auto"
+    },
+    "migrations": {
+      "command": "pnpx",
+      "args": [
+        "--reporter=silent",
+        "tsx",
+        "mcp/src/index.ts",
+        "app/cmd/.env"
+      ],
+      "directTools": true
     }
   }
 }

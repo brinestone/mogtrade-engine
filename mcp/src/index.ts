@@ -1,9 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { spawn } from "child_process";
+import { config } from "dotenv";
 import { join } from "path";
 import z from "zod";
 
+config({ path: join(process.cwd(), process.argv[process.argv.length-1]) })
 const NewMigrationOutput = z.object({
     up: z.string(),
     down: z.string()
@@ -100,10 +102,28 @@ async function generateQueries(signal: AbortSignal) {
 }
 
 const server = new McpServer({
-    name: 'mogtade',
+    name: 'mogtade-migrate',
+    description: 'Provides tools for performing migrations and generating type-safe Golang Code for interacting with the database and querying the database',
     version: '1.0.0',
 });
 const migrationsDir = join(process.cwd(), 'infra', 'scripts', 'migrations');
+
+server.registerTool('generate_queries', {
+    title: 'Generate Queries',
+    description: 'Generates sqlc queries from database model',
+
+}, async ({ mcpReq }) => {
+    try {
+        const dbUrl = process.env.DB_URL;
+        if (!dbUrl) {
+            return { content: [{ type: 'text', text: 'Internal error. Database not found via the "DB_URL" environment variable' }], isError: true }
+        }
+        await generateQueries(mcpReq.signal);
+        return { content: [{ type: 'text', text: 'Queries generated successfully' }] }
+    } catch (e) {
+        return { content: [{ type: 'text', text: (e as Error).message }], isError: true }
+    }
+})
 
 server.registerTool('apply_down_migrations', {
     title: 'Apply down Migrations',
@@ -160,7 +180,7 @@ server.registerTool('get_migration_version', {
     }
 })
 
-server.registerTool('create_migration', {
+server.registerTool('create_migration_files', {
     title: 'Create Migration',
     description: 'Creates a pair of migration PostgreSQL up/down scripts',
     inputSchema: z.object({

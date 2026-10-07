@@ -1,0 +1,11 @@
+{
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "**/mcp.json",
+                ".mcp.json"
+            ],
+            "url": "https://github.com/modelcontextprotocol/specification/raw/main/schema/mcp.json"
+        }
+    ]
+}

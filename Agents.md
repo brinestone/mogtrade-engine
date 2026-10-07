@@ -35,6 +35,9 @@ The following files/directories should not be accessed at all costs
 ## Conventions
 - Generated identifiers are ULID values.
 - Use the `contract.IdGeneratorFunc` function for creating IDs
+- When making changes to database schemas, always use the `mogtrade-migrate` mcp server's tools to do that. NEVER write the queries
+  or types yourself. ALWAYS use the MCP server. If it is not available require the user to make it available. DO NOT GENERATE DATABASE QUERIES
+  OR DATABASE MODELS YOURSELF
 
 ### Branch Naming Convention
 Always create a new git branch for each feature or bugfix before beginning work. Use descriptive branch names following the convention: `feat/<feature-name>`, `fix/<bug-description>`, or `refactor/<refactor-purpose>`. Never commit directly to the `main` or `master` branch. Open a Pull Request against `main` after completing the feature/bugfix and ensure all tests pass.

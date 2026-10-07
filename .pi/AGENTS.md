@@ -1,5 +1,6 @@
-> **Inherits from:** `../agents.md` (General Base)
+# Pi Agent Configuration
 
+> **Inheritance Note:** This file extends the project root [`../AGENTS.md`](../AGENTS.md). Please follow all base instructions outlined there, and apply the Pi-specific overrides and additions below.
 ## Knowledge base management
 - All research notes, plans and findings should be stored in the MogTrade obsidian vault as knowledge base
 - Always refresh yourself with the latest (working branch) working knowledge in the MogTrade obsidian vault knowledge base.
