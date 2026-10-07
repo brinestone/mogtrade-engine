@@ -72,3 +72,11 @@ Ensure each commit addresses a single concern and is logically separate from oth
 5. Open a Pull Request against `main`
 6. Address code review feedback
 7. Merge Pull Request after approval
+
+
+## Knowledge base management
+- All research notes, plans and findings should be stored in the MogTrade obsidian vault as knowledge base
+- Always refresh yourself with the latest (working branch) working knowledge in the MogTrade obsidian vault knowledge base.
+- When starting a new feature create a git branch as well as a corresponding obsidian branch when needed for storing and referencing knowledge.
+- When making a note in the knowledge base, always reference the central note called `architecture.md`.
+- When documenting flows in the knowledge base, always make illustrations using mermaid diagrams as much as possible.
