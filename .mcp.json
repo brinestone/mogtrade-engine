@@ -1,14 +1,9 @@
 {
   "mcpServers": {
-    "mogtrade-dev-mcp": {
-      "command": "npx",
-      "args": [
-        "tsx",
-        "mcp/src/index.ts"
-      ],
-      "cwd": ".",
-      "envFile": "app/cmd/.env",
-      "directTools": true
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp",
+      "auth": "oauth",
+      "protocolVersion": "auto"
     }
   }
 }

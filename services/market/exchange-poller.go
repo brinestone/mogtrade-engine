@@ -5,16 +5,16 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/brinestone/mogtrade/core/feed"
+	"github.com/brinestone/mogtrade/core/contract"
 )
 
 type ExchangePoller struct {
 	hub       *ExchangeHub
 	logger    *slog.Logger
-	exchanges []feed.Datasource
+	exchanges []contract.Datasource
 }
 
-func NewExchangePoller(l *slog.Logger, hub *ExchangeHub, sources []feed.Datasource) *ExchangePoller {
+func NewExchangePoller(l *slog.Logger, hub *ExchangeHub, sources []contract.Datasource) *ExchangePoller {
 	return &ExchangePoller{logger: l, hub: hub, exchanges: sources}
 }
 

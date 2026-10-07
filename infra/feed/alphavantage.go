@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/brinestone/mogtrade/core/contract"
 )
 
 type AVTimeRange string
@@ -44,39 +46,39 @@ func (ds *AlphaVantageDatasource) newClient() *http.Client {
 	return &http.Client{Timeout: ds.RequestTimeout}
 }
 
-func (req DatasourceQueryRequestInterval) toAlphaVantageFunction() AVFunction {
+func toAlphaVantageFunction(req contract.DatasourceQueryRequestInterval) AVFunction {
 	switch req {
-	case IVDay:
+	case contract.IVDay:
 		return AVFDaily
-	case IVWeek:
+	case contract.IVWeek:
 		return AVFWeekly
-	case IvMonth:
+	case contract.IvMonth:
 		return AVFMonthly
 	default:
 		return AVFIntraDay
 	}
 }
 
-func (req DatasourceQueryRequestInterval) toAlphaVantageInterval() string {
+func toAlphaVantageInterval(req contract.DatasourceQueryRequestInterval) string {
 	switch req {
-	case IVHour:
+	case contract.IVHour:
 		return "60min"
-	case IVHalfHour:
+	case contract.IVHalfHour:
 		return "30min"
 	default:
 		return "5min"
 	}
 }
 
-func (req DatasourceQueryRequest) toAlphaVantageQueryUrl(apiKey string) string {
-	url := fmt.Sprintf("https://www.alphavantage.co/query?function=%s&symbol=%s&interval=%s&apikey=%s", req.Interval.toAlphaVantageFunction(), req.Symbol, req.Interval.toAlphaVantageInterval(), apiKey)
+func toAlphaVantageQueryUrl(apiKey string, req contract.DatasourceQueryRequest) string {
+	url := fmt.Sprintf("https://www.alphavantage.co/query?function=%s&symbol=%s&interval=%s&apikey=%s", toAlphaVantageFunction(req.Interval), req.Symbol, toAlphaVantageInterval(req.Interval), apiKey)
 	return url
 }
 
-func (ds *AlphaVantageDatasource) Pull(query DatasourceQueryRequest) (entries []FeedEntry, err error) {
+func (ds *AlphaVantageDatasource) Pull(query contract.DatasourceQueryRequest) (entries []contract.FeedEntry, err error) {
 	client := ds.newClient()
 
-	res, err := client.Get(query.toAlphaVantageQueryUrl(ds.apiKey))
+	res, err := client.Get(toAlphaVantageQueryUrl(ds.apiKey, query))
 	if err != nil {
 		return
 	}
@@ -99,7 +101,7 @@ func (ds *AlphaVantageDatasource) Pull(query DatasourceQueryRequest) (entries []
 
 	var key string
 	var timeFormat string
-	switch query.Interval.toAlphaVantageFunction() {
+	switch toAlphaVantageFunction(query.Interval) {
 	case AVFDaily:
 		key = "Time Series (Daily)"
 	case AVFMonthly:
@@ -110,7 +112,7 @@ func (ds *AlphaVantageDatasource) Pull(query DatasourceQueryRequest) (entries []
 		key = fmt.Sprintf("Time Series (%s)", query.Interval)
 	}
 
-	switch query.Interval.toAlphaVantageFunction() {
+	switch toAlphaVantageFunction(query.Interval) {
 	case AVFDaily:
 	case AVFWeekly:
 	case AVFMonthly:
@@ -134,7 +136,7 @@ func (ds *AlphaVantageDatasource) Pull(query DatasourceQueryRequest) (entries []
 		if err != nil {
 			break
 		}
-		entry := FeedEntry{
+		entry := contract.FeedEntry{
 			Source:    "AlphaVantage",
 			Timestamp: timestamp,
 			TradeData: tradeData,
@@ -142,14 +144,14 @@ func (ds *AlphaVantageDatasource) Pull(query DatasourceQueryRequest) (entries []
 		entries = append(entries, entry)
 	}
 	if err != nil {
-		entries = make([]FeedEntry, 0)
+		entries = make([]contract.FeedEntry, 0)
 	}
 
 	return
 }
 
-func mapToAlphaVantageTradeData(m map[string]any) (TradeData, error) {
-	data := TradeData{}
+func mapToAlphaVantageTradeData(m map[string]any) (contract.TradeData, error) {
+	data := contract.TradeData{}
 	high, err := strconv.ParseFloat(m["2. high"].(string), 64)
 	if err != nil {
 		return data, err
@@ -180,7 +182,7 @@ func mapToAlphaVantageTradeData(m map[string]any) (TradeData, error) {
 	return data, nil
 }
 
-func NewAlphaVantageDatasource(apikey string, config AlphaVantageConfig) Datasource {
+func NewAlphaVantageDatasource(apikey string, config AlphaVantageConfig) *AlphaVantageDatasource {
 	ds := &AlphaVantageDatasource{
 		apiKey:             apikey,
 		AlphaVantageConfig: config,

@@ -17,11 +17,11 @@ import (
 	sentryslog "github.com/getsentry/sentry-go/slog"
 
 	"github.com/brinestone/mogtrade/core/contract"
-	"github.com/brinestone/mogtrade/core/feed"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/adapter"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
+	"github.com/brinestone/mogtrade/infra/feed"
 	"github.com/brinestone/mogtrade/infra/mail"
 	"github.com/brinestone/mogtrade/infra/sources"
 	"github.com/brinestone/mogtrade/infra/storage"
@@ -44,7 +44,7 @@ func setupServices() error {
 	}
 
 	if err := ioc.Factory(func(h *market.ExchangeHub, l *slog.Logger) *market.ExchangePoller {
-		return market.NewExchangePoller(l.With("service", "exchange-poller"), h, []feed.Datasource{
+		return market.NewExchangePoller(l.With("service", "exchange-poller"), h, []contract.Datasource{
 			feed.NewMassiveDatasource(os.Getenv("MASSIVE_API_KEY"), feed.MassiveConfig{RequestTimeout: 10 * time.Second}),
 			feed.NewAlphaVantageDatasource(os.Getenv("ALPHAVANTAGE_API_KEY"), feed.AlphaVantageConfig{RequestTimeout: 10 * time.Second}),
 		})
@@ -135,7 +135,7 @@ func setupAdapters(ctx context.Context) error {
 	}, true)
 	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.TickerInfoProvider { return m })
 	ioc.Factory(func(m *sources.MassiveMarketInfoProvider) contract.ExchangeInfoProvider { return m })
-	err = ioc.Factory(func() (mail.Mailer, error) {
+	err = ioc.Factory(func() (contract.Mailer, error) {
 		sender := os.Getenv("MAILTRAP_API_KEY")
 		senderName := "MogTrade"
 		mailer, err := mail.NewMailtrapMailer(sender, senderName, func() string {
@@ -153,7 +153,7 @@ func setupAdapters(ctx context.Context) error {
 		return adapter.NewCronJobScheduler(ctx, l.With("service", "job-scheduler"))
 	}, true)
 	ioc.Factory(func() contract.EventBus {
-		return events.UseInMemoryEventBus(ctx)
+		return events.UseInMemoryEventBus()
 	}, true)
 	ioc.Bind(adapter.UlidIdGenerator)
 	ioc.Factory(func() *adapter.JwtAdapter {

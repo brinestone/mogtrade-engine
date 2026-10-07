@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"io"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/mailtrap/mailtrap-go"
 )
 
@@ -24,7 +25,7 @@ func (m mailtrapMailSendResult) GetMailId() string {
 	return m.MessageIDs[0]
 }
 
-func toMailTrapRecepientAddresses(mail MailDescription) []mailtrap.Address {
+func toMailTrapRecepientAddresses(mail contract.MailDescription) []mailtrap.Address {
 	res := make([]mailtrap.Address, 0)
 	for _, m := range mail.Recepients {
 		res = append(res, mailtrap.Address{Email: m})
@@ -32,7 +33,7 @@ func toMailTrapRecepientAddresses(mail MailDescription) []mailtrap.Address {
 	return res
 }
 
-func toMailTrapAttachment(a AttachmentDescription) (mailtrap.Attachment, error) {
+func toMailTrapAttachment(a contract.AttachmentDescription) (mailtrap.Attachment, error) {
 	buf, err := io.ReadAll(a.Reader)
 	if err != nil {
 		return mailtrap.Attachment{}, err
@@ -47,7 +48,7 @@ func toMailTrapAttachment(a AttachmentDescription) (mailtrap.Attachment, error) 
 	}, nil
 }
 
-func toMailTrapRequest(mail MailDescription, name, sender string) (*mailtrap.SendRequest, error) {
+func toMailTrapRequest(mail contract.MailDescription, name, sender string) (*mailtrap.SendRequest, error) {
 	req := &mailtrap.SendRequest{
 		From:    mailtrap.Address{Name: name, Email: sender},
 		To:      toMailTrapRecepientAddresses(mail),
@@ -70,7 +71,7 @@ func toMailTrapRequest(mail MailDescription, name, sender string) (*mailtrap.Sen
 }
 
 // SendBulk implements [Mailer].
-func (m *mailtrapMailer) SendMail(ctx context.Context, mail MailDescription) (MailDeliveryResult, error) {
+func (m *mailtrapMailer) SendMail(ctx context.Context, mail contract.MailDescription) (contract.MailDeliveryResult, error) {
 	req, err := toMailTrapRequest(mail, m.name, m.sender)
 	if err != nil {
 		return nil, err
@@ -84,11 +85,11 @@ func (m *mailtrapMailer) SendMail(ctx context.Context, mail MailDescription) (Ma
 }
 
 // SendMail implements [Mailer].
-func (m *mailtrapMailer) SendBulk(context.Context, []MailDescription) (MailDeliveryResult, error) {
+func (m *mailtrapMailer) SendBulk(context.Context, []contract.MailDescription) (contract.MailDeliveryResult, error) {
 	panic("unimplemented")
 }
 
-func NewMailtrapMailer(sender string, displayName string, keyProvider func() string) (Mailer, error) {
+func NewMailtrapMailer(sender string, displayName string, keyProvider func() string) (contract.Mailer, error) {
 	client, err := mailtrap.NewClient(keyProvider())
 	if err != nil {
 		return nil, err

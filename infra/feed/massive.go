@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/models"
 )
@@ -27,7 +28,7 @@ func (ds *MassiveDatasource) Name() string {
 
 // Pull fetches recent aggregate bar data from Massive for the given symbol and interval.
 // Uses the official polygon.io client-go SDK.
-func (ds *MassiveDatasource) Pull(query DatasourceQueryRequest) (entries []FeedEntry, err error) {
+func (ds *MassiveDatasource) Pull(query contract.DatasourceQueryRequest) (entries []contract.FeedEntry, err error) {
 	// Create the Polygon client
 	client := polygon.New(ds.apiKey)
 
@@ -65,7 +66,7 @@ func (ds *MassiveDatasource) Pull(query DatasourceQueryRequest) (entries []FeedE
 		tradeData := MassiveTradeDataToTradeData(agg)
 		// Convert Millis (time.Time) to time.Time directly
 		timestamp := time.Time(agg.Timestamp)
-		entry := FeedEntry{
+		entry := contract.FeedEntry{
 			Source:    "Massive",
 			Timestamp: timestamp,
 			TradeData: tradeData,
@@ -77,8 +78,8 @@ func (ds *MassiveDatasource) Pull(query DatasourceQueryRequest) (entries []FeedE
 }
 
 // MassiveTradeDataToTradeData converts a polygon.io Agg model to internal TradeData.
-func MassiveTradeDataToTradeData(agg models.Agg) TradeData {
-	return TradeData{
+func MassiveTradeDataToTradeData(agg models.Agg) contract.TradeData {
+	return contract.TradeData{
 		Open:   agg.Open,
 		High:   agg.High,
 		Low:    agg.Low,
@@ -93,7 +94,7 @@ func ptr[T any](v T) *T {
 }
 
 // NewMassiveDatasource creates a new MassiveDatasource with the given API key and configuration.
-func NewMassiveDatasource(apikey string, config MassiveConfig) Datasource {
+func NewMassiveDatasource(apikey string, config MassiveConfig) *MassiveDatasource {
 	ds := &MassiveDatasource{
 		apiKey:        apikey,
 		MassiveConfig: config,

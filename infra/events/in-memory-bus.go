@@ -9,12 +9,11 @@ import (
 )
 
 type memoryEventBus struct {
-	mu      sync.RWMutex
-	subs    map[string][]contract.DataChannel
-	context context.Context
+	mu   sync.RWMutex
+	subs map[string][]contract.DataChannel
 }
 
-func (m *memoryEventBus) Subscribe(topic string) contract.DataChannel {
+func (m *memoryEventBus) Subscribe(ctx context.Context, topic string) <-chan contract.Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -23,11 +22,11 @@ func (m *memoryEventBus) Subscribe(topic string) contract.DataChannel {
 	go func(ctx context.Context) {
 		<-ctx.Done()
 		close(ch)
-	}(m.context)
+	}(ctx)
 	return ch
 }
 
-func (m *memoryEventBus) Publish(topic string, data any) {
+func (m *memoryEventBus) Publish(topic string, data any) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -38,17 +37,13 @@ func (m *memoryEventBus) Publish(topic string, data any) {
 			}
 		}(channels, contract.Event{Data: data, Timestamp: time.Now()})
 	}
+	return nil
 }
 
-func (m *memoryEventBus) Context() context.Context {
-	return m.context
-}
-
-func UseInMemoryEventBus(ctx context.Context) contract.EventBus {
+func UseInMemoryEventBus() contract.EventBus {
 	bus := &memoryEventBus{
-		context: ctx,
-		mu:      sync.RWMutex{},
-		subs:    make(map[string][]contract.DataChannel),
+		mu:   sync.RWMutex{},
+		subs: make(map[string][]contract.DataChannel),
 	}
 	return bus
 }

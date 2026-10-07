@@ -11,7 +11,6 @@ type Event struct {
 }
 type DataChannel chan Event
 type EventBus interface {
-	Subscribe(string) DataChannel
-	Publish(string, any)
-	Context() context.Context
+	Subscribe(context.Context, string) <-chan Event
+	Publish(string, any) error
 }

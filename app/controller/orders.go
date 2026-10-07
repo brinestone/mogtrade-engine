@@ -214,7 +214,7 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 	c.subscribeToEventsV1()
 }
 
-func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch contract.DataChannel) {
+func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract.Event) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -287,8 +287,9 @@ func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch contract.DataCh
 }
 
 func (c *Orders) subscribeToEventsV1() {
-	matchFound := c.eb.Subscribe(matching.EventKeyOrderMatched)
-	go c.handleOnMatchFoundEvent(c.eb.Context(), matchFound)
+	ctx := context.TODO()
+	matchFound := c.eb.Subscribe(ctx, matching.EventKeyOrderMatched)
+	go c.handleOnMatchFoundEvent(ctx, matchFound)
 }
 
 func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdFactory, e *matching.Engine, eb contract.EventBus, cc contract.CurrencyConverter) *Orders {
