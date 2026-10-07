@@ -34,6 +34,46 @@ MogTrade is a comprehensive trading platform engine that provides a RESTful API 
 - RESTful API for trading, account management, and market data
 - Support for multiple exchange data feeds (currently Massive API)
 - Secure authentication with JWT and multi-factor authentication
+
+<tool_call>
+<function=write>
+<parameter=content>
+# MogTrade - Trading Platform
+
+## Overview
+
+MogTrade is a comprehensive trading platform engine that provides a RESTful API for frontends and clients to connect to and execute trades on connected stock market exchanges. The platform is designed with high performance and low latency in mind, featuring a modular architecture that separates concerns across four main modules: app, core, infra, and services.
+
+## Project Structure
+
+### app
+- Contains the main entrypoint executable
+- Uses GIN framework for REST API hosting
+- Implements IoC Container for dependency injection
+- Contains API controllers, middleware, and HTTP handlers
+
+### core
+- Contains core library interfaces that can be used throughout the project
+- Defines interfaces for data access, authentication, and other core concepts
+
+### infra
+- Contains implementation details for external system integrations
+- Handles communication with external systems
+- Contains database integration code and migration utilities
+
+### services
+- Contains service functions for business logic and core trading functionality
+- Implements the core library interfaces defined in the core module
+
+### go.work and go.sum
+- Link the different modules together
+- Manage Go module dependencies
+
+## Key Features
+
+- RESTful API for trading, account management, and market data
+- Support for multiple exchange data feeds (currently Massive API)
+- Secure authentication with JWT and multi-factor authentication
 - Rate limiting and abuse protection mechanisms
 - Session management with JWT tokens
 - Comprehensive logging and error tracking via Sentry
@@ -51,9 +91,7 @@ The MassiveDatasource implements the feed.Datasource interface to fetch aggregat
 - Configurable request timeout via MassiveConfig
 - Handles API rate limits and errors gracefully
 
-## Massive API Integration
-
-The MassiveDatasource queries the Massive API endpoint:
+### API Endpoint
 ```
 https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{from}/{to}?apiKey={apikey}
 ```
@@ -162,7 +200,7 @@ cd I:/mogtrade-engine/app && go build ./...
 ## Testing
 
 - Run `go test ./...` to execute all tests
-- Use `go test -cover` to check test coverage
+- Use `go test -cover` to check coverage
 - Ensure all tests pass before submitting PR
 
 ## License

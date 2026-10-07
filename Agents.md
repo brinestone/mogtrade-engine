@@ -35,3 +35,15 @@ The following files/directories should not be accessed at all costs
 ## Conventions
 - Generated identifiers are ULID values.
 - Use the `contract.IdGeneratorFunc` function for creating IDs
+
+### Branch Naming Convention
+Always create a new git branch for each feature or bugfix before beginning work. Use descriptive branch names following the convention: `feat/<feature-name>`, `fix/<bug-description>`, or `refactor/<refactor-purpose>`. Never commit directly to the `main` or `master` branch. Open a Pull Request against `main` after completing the feature/bugfix and ensure all tests pass.
+
+### Branch Creation Workflow
+1. Create a new branch: `git checkout -b feat/your-feature-name`
+2. Implement the feature/bugfix
+3. Commit changes with descriptive messages
+4. Push the branch: `git push origin feat/your-feature-name`
+5. Open a Pull Request against `main`
+6. Address code review feedback
+7. Merge Pull Request after approval
