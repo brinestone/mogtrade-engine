@@ -40,6 +40,28 @@ The following files/directories should not be accessed at all costs
 Always create a new git branch for each feature or bugfix before beginning work. Use descriptive branch names following the convention: `feat/<feature-name>`, `fix/<bug-description>`, or `refactor/<refactor-purpose>`. Never commit directly to the `main` or `master` branch. Open a Pull Request against `main` after completing the feature/bugfix and ensure all tests pass.
 
 ### Branch Creation Workflow
+## Commit Message Convention
+Use conventional commit messages following the format:
+`type(scope): description`
+
+Where `type` is one of:
+- `feat`: A new feature
+- `fix`: A bug fix
+- `refactor`: A code refactor
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, missing semicolons, etc.)
+- `test`: Adding missing tests
+- `chore`: Routine maintenance tasks
+
+The `scope` is optional and should denote the area of the codebase (e.g., `auth`, `api`, `infra`).
+
+Example commit messages:
+- `feat(auth): add JWT authentication middleware`
+- `fix(api): resolve rate limiting issue`
+- `refactor(core): improve user query performance`
+- `docs(readme): update contribution guidelines`
+
+Ensure each commit addresses a single concern and is logically separate from other changes.
 1. Create a new branch: `git checkout -b feat/your-feature-name`
 2. Implement the feature/bugfix
 3. Commit changes with descriptive messages
