@@ -493,6 +493,16 @@ type User struct {
 	Prefs         []byte
 }
 
+type Verification struct {
+	ID        string
+	UserID    string
+	Token     string
+	Type      string
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+	Used      *bool
+}
+
 type WalletSnapshot struct {
 	WalletID          string
 	OwnerID           *string

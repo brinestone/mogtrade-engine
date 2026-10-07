@@ -14,7 +14,7 @@ update "user"
 set
     email_verified = true,
     updated_at = now()
-WHERE
+where
     id = $1;
 
 -- name: IsEmailAvailable :one
@@ -77,7 +77,7 @@ SELECT
     *
 FROM
     account
-WHERE
+where
     provider = 'credential'
     and account_id = $1
 limit
@@ -88,9 +88,9 @@ SELECT
     *
 FROM
     "user"
-WHERE
+where
     email = $1
-LIMIT
+limit
     1;
 
 -- name: FindUserById :one
@@ -98,15 +98,15 @@ SELECT
     *
 FROM
     "user"
-WHERE
+where
     id = $1
-LIMIT
+limit
     1;
 
 -- name: CreateUser :one
 INSERT INTO
     "user" (id, name, email, image)
-VALUES
+values
     ($1, $2, $3, $4)
 RETURNING
     created_at;
@@ -114,7 +114,48 @@ RETURNING
 -- name: CreateCredentialAccount :one
 INSERT INTO
     account (provider, id, account_id, user_id, "password")
-VALUES
+values
     ('credential', $1, $2, $3, $4)
 RETURNING
     created_at;
+
+-- name: InsertVerification :exec
+insert into
+    verifications (user_id, token, type, expires_at)
+values
+    ($1, $2, $3, $4);
+
+-- name: GetVerificationByToken :one
+select
+    id,
+    user_id,
+    token,
+    type,
+    expires_at,
+    created_at,
+    used
+from
+    verifications
+where
+    token = $1
+    and used = false;
+
+-- name: MarkVerificationUsed :exec
+update verifications
+set
+    used = true,
+    used_at = now()
+where
+    token = $1;
+
+-- name: ListUnusedVerificationsByUser :many
+select
+    id,
+    token,
+    type,
+    expires_at
+from
+    verifications
+where
+    user_id = $1
+    and used = false;

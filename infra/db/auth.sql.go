@@ -14,7 +14,7 @@ import (
 const createCredentialAccount = `-- name: CreateCredentialAccount :one
 INSERT INTO
     account (provider, id, account_id, user_id, "password")
-VALUES
+values
     ('credential', $1, $2, $3, $4)
 RETURNING
     created_at
@@ -68,7 +68,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 const createUser = `-- name: CreateUser :one
 INSERT INTO
     "user" (id, name, email, image)
-VALUES
+values
     ($1, $2, $3, $4)
 RETURNING
     created_at
@@ -118,7 +118,7 @@ SELECT
     id, account_id, provider, user_id, access_token, refresh_token, id_token, access_token_expires_at, refresh_token_expires_at, scope, password, created_at, updated_at
 FROM
     account
-WHERE
+where
     provider = 'credential'
     and account_id = $1
 limit
@@ -151,9 +151,9 @@ SELECT
     id, name, email, email_verified, image, created_at, updated_at, prefs
 FROM
     "user"
-WHERE
+where
     email = $1
-LIMIT
+limit
     1
 `
 
@@ -178,9 +178,9 @@ SELECT
     id, name, email, email_verified, image, created_at, updated_at, prefs
 FROM
     "user"
-WHERE
+where
     id = $1
-LIMIT
+limit
     1
 `
 
@@ -198,6 +198,61 @@ func (q *Queries) FindUserById(ctx context.Context, id string) (User, error) {
 		&i.Prefs,
 	)
 	return i, err
+}
+
+const getVerificationByToken = `-- name: GetVerificationByToken :one
+select
+    id,
+    user_id,
+    token,
+    type,
+    expires_at,
+    created_at,
+    used
+from
+    verifications
+where
+    token = $1
+    and used = false
+`
+
+func (q *Queries) GetVerificationByToken(ctx context.Context, token string) (Verification, error) {
+	row := q.db.QueryRow(ctx, getVerificationByToken, token)
+	var i Verification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Token,
+		&i.Type,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Used,
+	)
+	return i, err
+}
+
+const insertVerification = `-- name: InsertVerification :exec
+insert into
+    verifications (user_id, token, type, expires_at)
+values
+    ($1, $2, $3, $4)
+`
+
+type InsertVerificationParams struct {
+	UserID    string
+	Token     string
+	Type      string
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertVerification(ctx context.Context, arg InsertVerificationParams) error {
+	_, err := q.db.Exec(ctx, insertVerification,
+		arg.UserID,
+		arg.Token,
+		arg.Type,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const invalidateRefreshTokensForDevice = `-- name: InvalidateRefreshTokensForDevice :exec
@@ -233,6 +288,51 @@ func (q *Queries) IsEmailAvailable(ctx context.Context, email string) (bool, err
 	return not_exists, err
 }
 
+const listUnusedVerificationsByUser = `-- name: ListUnusedVerificationsByUser :many
+select
+    id,
+    token,
+    type,
+    expires_at
+from
+    verifications
+where
+    user_id = $1
+    and used = false
+`
+
+type ListUnusedVerificationsByUserRow struct {
+	ID        string
+	Token     string
+	Type      string
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListUnusedVerificationsByUser(ctx context.Context, userID string) ([]ListUnusedVerificationsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listUnusedVerificationsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnusedVerificationsByUserRow
+	for rows.Next() {
+		var i ListUnusedVerificationsByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Token,
+			&i.Type,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lookupRefreshTokenByDevice = `-- name: LookupRefreshTokenByDevice :one
 select
     rts.user_id,
@@ -261,6 +361,20 @@ func (q *Queries) LookupRefreshTokenByDevice(ctx context.Context, arg LookupRefr
 	var i LookupRefreshTokenByDeviceRow
 	err := row.Scan(&i.UserID, &i.Usable)
 	return i, err
+}
+
+const markVerificationUsed = `-- name: MarkVerificationUsed :exec
+update verifications
+set
+    used = true,
+    used_at = now()
+where
+    token = $1
+`
+
+func (q *Queries) MarkVerificationUsed(ctx context.Context, token string) error {
+	_, err := q.db.Exec(ctx, markVerificationUsed, token)
+	return err
 }
 
 const removeStaleRefreshTokens = `-- name: RemoveStaleRefreshTokens :exec
@@ -299,7 +413,7 @@ update "user"
 set
     email_verified = true,
     updated_at = now()
-WHERE
+where
     id = $1
 `
 
