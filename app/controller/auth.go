@@ -215,6 +215,7 @@ func (a *Auth) MountV1(r *gin.RouterGroup) {
 	public.POST("/register/credential", a.handleCredentialRegister)
 	public.GET("/refresh", a.handleAccessTokenRefresh)
 	public.GET("/email-available", a.handleEmailExistsCheck)
+	public.POST("/password-reset/request", a.handlePasswordReset)
 }
 
 func NewAuthController(idg contract.IdFactory, l *slog.Logger, q *db.Queries, p *pgxpool.Pool, te contract.TokenEncoder) *Auth {

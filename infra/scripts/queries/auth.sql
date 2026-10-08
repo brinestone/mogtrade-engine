@@ -121,7 +121,7 @@ RETURNING
 
 -- name: InsertVerification :exec
 insert into
-    verifications (user_id, token, type, expires_at)
+    verifications (user_id, token, "type", expires_at)
 values
     ($1, $2, $3, $4);
 
@@ -130,7 +130,7 @@ select
     id,
     user_id,
     token,
-    type,
+    "type",
     expires_at,
     created_at,
     used
@@ -152,7 +152,7 @@ where
 select
     id,
     token,
-    type,
+    "type",
     expires_at
 from
     verifications

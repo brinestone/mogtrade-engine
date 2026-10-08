@@ -49,6 +49,11 @@ type RotateAccessTokenInput struct {
 	Lifetime       time.Duration
 }
 
+type BeginPasswordResetParams struct {
+	Email          string
+	VerificationId string
+}
+
 var (
 	ErrNoAuthAccountFound   = errors.New("account not found with provided credentials")
 	ErrInavlidCredentials   = errors.New("invalid credentials provided")
