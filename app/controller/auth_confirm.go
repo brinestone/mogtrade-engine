@@ -1,17 +1,16 @@
 package controller
 
 import (
-	"context"
+	"errors"
 	"net/http"
-	"strconv"
+	"net/url"
+	"strings"
 	"time"
 
-	"github.com/brinestone/mogtrade/app/helpers"
-	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
-	"github.com/brinestone/mogtrade/core/contract"
-	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/brinestone/mogtrade/services/auth"
+	"github.com/brinestone/mogtrade/web/helpers"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/argon2"
+	"github.com/jackc/pgx/v5"
 )
 
 // handlePasswordResetConfirm – GET /auth/password-reset/confirm?token=<token>
@@ -24,78 +23,75 @@ func (a *Auth) handlePasswordResetConfirm(c *gin.Context) {
 	}
 
 	// Look up the verification row
-	ver, err := db.GetVerificationByToken(c.Request.Context(), token)
+	ver, err := a.repo.GetUnusedVerificationByToken(c.Request.Context(), token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to look up verification"})
 		return
 	}
 
-	// Check that the token exists, is not used, and is not expired
-	if ver.Used {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "token already used"})
-		return
-	}
 	if time.Now().After(ver.ExpiresAt.Time) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "token expired"})
 		return
 	}
 
-	// Mark the token as used
-	ver.Used = true
-	ver.UsedAt = time.Now()
-	_ = db.MarkVerificationUsed(c.Request.Context(), token)
-
-	// Show the password reset form (or return JSON indicating it's ready)
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "ready",
-		"userId":    ver.UserID,
-		"expiresAt": ver.ExpiresAt.Time,
+	err = helpers.WithTransaction(c.Request.Context(), func(tx pgx.Tx) error {
+		return auth.PrimeVerification(c.Request.Context(), a.repo.WithTx(tx), token)
 	})
+	if err != nil {
+		if errors.Is(err, auth.ErrVerificationNotFound) {
+			a.logger.Warn("verification not found or used", "token", token)
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "verification expired or already used"})
+			return
+		}
+		a.logger.Error("could not prime verification", "token", token, "err", err.Error())
+		helpers.InternalServerError(c)
+		return
+	}
+
+	if ver.CallbackUrl != nil {
+		u, err := url.Parse(*ver.CallbackUrl)
+		if err != nil {
+			a.logger.Warn("invalid callback url for verification", "vId", ver.ID, "err", err.Error(), "callbackUrl", *ver.CallbackUrl)
+			helpers.InternalServerError(c)
+			return
+		}
+		u.Query().Add("vt", token)
+		c.Redirect(http.StatusTemporaryRedirect, u.String())
+		return
+	}
+	c.Status(http.StatusAccepted)
 }
 
 // handlePasswordResetSubmit – POST /auth/password-reset/submit
-//   { "token": "...", "new_password": "..." }
+//
+//	{ "token": "...", "new_password": "..." }
 func (a *Auth) handlePasswordResetSubmit(c *gin.Context) {
 	var req struct {
-		Token      string `json:"token" binding:"required"`
+		Token       string `json:"token" binding:"required"`
 		NewPassword string `json:"new_password" binding:"required,min=12"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": strings.Split(err.Error(), "\n")})
 		return
 	}
 
-	// Look up the verification row
-	ver, err := db.GetVerificationByToken(c.Request.Context(), req.Token)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to look up verification"})
-		return
-	}
-
-	// Check that the token exists, is not used, and is not expired
-	if ver.Used {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "token already used"})
-		return
-	}
-	if time.Now().After(ver.ExpiresAt.Time) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "token expired"})
-		return
-	}
-
-	// Hash the new password using the existing argon2 helper
-	// HashPassword returns a hex-encoded salt+hash
-	hashedNewPassword, err := auth.HashPassword(req.NewPassword)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
-	}
-
-	// Update the user's password in the database
-	// We need to find the user first - but we only have the user ID from the verification
-	// For now, we'll use a placeholder approach - in a real implementation,
-	// we'd need to look up the user by ID and update their password
-	c.JSON(http.StatusOK, gin.H{
-		"status": "password updated successfully",
-		// In a real implementation, we would update the user's password hash here
+	err := helpers.WithTransaction(c.Request.Context(), func(tx pgx.Tx) error {
+		return auth.FinishPasswordReset(c.Request.Context(), a.repo.WithTx(tx), auth.FinishPasswordResetParams{
+			NewPassword:       req.NewPassword,
+			VerificationToken: req.Token,
+		})
 	})
+	if err != nil {
+		if errors.Is(err, auth.ErrVerificationNotFound) {
+			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "verification token either expired or already used", "status": "UNPROCESSIBLE_REQUEST"})
+			return
+		} else if errors.Is(err, auth.ErrNoAuthAccountFound) {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "account not found", "status": "NOT_FOUND"})
+			return
+		}
+		a.logger.Error("could not reset user password", "err", err.Error())
+		helpers.InternalServerError(c)
+		return
+	}
+	c.Status(http.StatusAccepted)
 }

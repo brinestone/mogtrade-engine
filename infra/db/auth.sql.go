@@ -93,6 +93,44 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (pgtype.
 	return created_at, err
 }
 
+const createVerification = `-- name: CreateVerification :exec
+insert into
+    verifications (
+        id,
+        user_id,
+        token,
+        valid_window,
+        "type",
+        ip,
+        callback_url
+    )
+values
+    ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type CreateVerificationParams struct {
+	ID          string
+	UserID      string
+	Token       string
+	ValidWindow string
+	Type        VerificationType
+	Ip          string
+	CallbackUrl *string
+}
+
+func (q *Queries) CreateVerification(ctx context.Context, arg CreateVerificationParams) error {
+	_, err := q.db.Exec(ctx, createVerification,
+		arg.ID,
+		arg.UserID,
+		arg.Token,
+		arg.ValidWindow,
+		arg.Type,
+		arg.Ip,
+		arg.CallbackUrl,
+	)
+	return err
+}
+
 const credentialAccountExistsByIdentifier = `-- name: CredentialAccountExistsByIdentifier :one
 select
     exists (
@@ -200,59 +238,103 @@ func (q *Queries) FindUserById(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
-const getVerificationByToken = `-- name: GetVerificationByToken :one
+const getPrimedVerificationByToken = `-- name: GetPrimedVerificationByToken :one
 select
-    id,
-    user_id,
-    token,
-    "type",
-    expires_at,
-    created_at,
-    used
+    v.id, v.user_id, v.token, v.type, v.valid_window, v.created_at, v.used_at, v.status, v.used, v.ip, v.callback_url,
+    (created_at + valid_window)::timestamptz as expires_at
 from
-    verifications
+    verifications v
 where
-    token = $1
-    and used = false
+    v.token = $1
+    and v.status = 'primed'
+    and v.used_at is null
+    and (v.created_at + v.valid_window) <= now()
+limit
+    1
 `
 
-func (q *Queries) GetVerificationByToken(ctx context.Context, token string) (Verification, error) {
-	row := q.db.QueryRow(ctx, getVerificationByToken, token)
-	var i Verification
+type GetPrimedVerificationByTokenRow struct {
+	ID          string
+	UserID      string
+	Token       string
+	Type        VerificationType
+	ValidWindow string
+	CreatedAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
+	Status      *VerificationStatus
+	Used        *bool
+	Ip          string
+	CallbackUrl *string
+	ExpiresAt   pgtype.Timestamptz
+}
+
+func (q *Queries) GetPrimedVerificationByToken(ctx context.Context, token string) (GetPrimedVerificationByTokenRow, error) {
+	row := q.db.QueryRow(ctx, getPrimedVerificationByToken, token)
+	var i GetPrimedVerificationByTokenRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Token,
 		&i.Type,
-		&i.ExpiresAt,
+		&i.ValidWindow,
 		&i.CreatedAt,
+		&i.UsedAt,
+		&i.Status,
 		&i.Used,
+		&i.Ip,
+		&i.CallbackUrl,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
-const insertVerification = `-- name: InsertVerification :exec
-insert into
-    verifications (user_id, token, "type", expires_at)
-values
-    ($1, $2, $3, $4)
+const getUnusedVerificationByToken = `-- name: GetUnusedVerificationByToken :one
+select
+    v.id, v.user_id, v.token, v.type, v.valid_window, v.created_at, v.used_at, v.status, v.used, v.ip, v.callback_url,
+    (created_at + valid_window)::timestamptz as expires_at
+from
+    verifications v
+where
+    v.token = $1
+    and v.used = false
+    and (v.created_at + v.valid_window) <= now()
+limit
+    1
 `
 
-type InsertVerificationParams struct {
-	UserID    string
-	Token     string
-	Type      string
-	ExpiresAt pgtype.Timestamptz
+type GetUnusedVerificationByTokenRow struct {
+	ID          string
+	UserID      string
+	Token       string
+	Type        VerificationType
+	ValidWindow string
+	CreatedAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
+	Status      *VerificationStatus
+	Used        *bool
+	Ip          string
+	CallbackUrl *string
+	ExpiresAt   pgtype.Timestamptz
 }
 
-func (q *Queries) InsertVerification(ctx context.Context, arg InsertVerificationParams) error {
-	_, err := q.db.Exec(ctx, insertVerification,
-		arg.UserID,
-		arg.Token,
-		arg.Type,
-		arg.ExpiresAt,
+func (q *Queries) GetUnusedVerificationByToken(ctx context.Context, token string) (GetUnusedVerificationByTokenRow, error) {
+	row := q.db.QueryRow(ctx, getUnusedVerificationByToken, token)
+	var i GetUnusedVerificationByTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Token,
+		&i.Type,
+		&i.ValidWindow,
+		&i.CreatedAt,
+		&i.UsedAt,
+		&i.Status,
+		&i.Used,
+		&i.Ip,
+		&i.CallbackUrl,
+		&i.ExpiresAt,
 	)
-	return err
+	return i, err
 }
 
 const invalidateRefreshTokensForDevice = `-- name: InvalidateRefreshTokensForDevice :exec
@@ -293,7 +375,7 @@ select
     id,
     token,
     "type",
-    expires_at
+    (created_at + valid_window)::timestamptz as expires_at
 from
     verifications
 where
@@ -304,7 +386,7 @@ where
 type ListUnusedVerificationsByUserRow struct {
 	ID        string
 	Token     string
-	Type      string
+	Type      VerificationType
 	ExpiresAt pgtype.Timestamptz
 }
 
@@ -366,7 +448,6 @@ func (q *Queries) LookupRefreshTokenByDevice(ctx context.Context, arg LookupRefr
 const markVerificationUsed = `-- name: MarkVerificationUsed :exec
 update verifications
 set
-    used = true,
     used_at = now()
 where
     token = $1
@@ -374,6 +455,19 @@ where
 
 func (q *Queries) MarkVerificationUsed(ctx context.Context, token string) error {
 	_, err := q.db.Exec(ctx, markVerificationUsed, token)
+	return err
+}
+
+const primeVerification = `-- name: PrimeVerification :exec
+update verifications
+set
+    status = 'primed'
+where
+    token = $1
+`
+
+func (q *Queries) PrimeVerification(ctx context.Context, token string) error {
+	_, err := q.db.Exec(ctx, primeVerification, token)
 	return err
 }
 
@@ -387,6 +481,47 @@ where
 func (q *Queries) RemoveStaleRefreshTokens(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, removeStaleRefreshTokens)
 	return err
+}
+
+const setUserCredentialPassword = `-- name: SetUserCredentialPassword :exec
+update account
+set
+    "password" = $1,
+    updated_at = now()
+where
+    provider = 'credential'
+    and user_id = $2
+`
+
+type SetUserCredentialPasswordParams struct {
+	Password *string
+	UserID   string
+}
+
+func (q *Queries) SetUserCredentialPassword(ctx context.Context, arg SetUserCredentialPasswordParams) error {
+	_, err := q.db.Exec(ctx, setUserCredentialPassword, arg.Password, arg.UserID)
+	return err
+}
+
+const unusedVerificationExistsByToken = `-- name: UnusedVerificationExistsByToken :one
+select
+    exists (
+        select
+            1
+        from
+            verifications
+        where
+            token = $1
+            and not used
+            and ((created_at + valid_window) < now())
+    )
+`
+
+func (q *Queries) UnusedVerificationExistsByToken(ctx context.Context, token string) (bool, error) {
+	row := q.db.QueryRow(ctx, unusedVerificationExistsByToken, token)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const userExistsWithId = `-- name: UserExistsWithId :one

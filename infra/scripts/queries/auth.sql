@@ -1,3 +1,12 @@
+-- name: SetUserCredentialPassword :exec
+update account
+set
+    "password" = $1,
+    updated_at = now()
+where
+    provider = 'credential'
+    and user_id = $2;
+
 -- name: UserExistsWithId :one
 select
     exists (
@@ -119,31 +128,57 @@ values
 RETURNING
     created_at;
 
--- name: InsertVerification :exec
+-- name: CreateVerification :exec
 insert into
-    verifications (user_id, token, "type", expires_at)
+    verifications (
+        id,
+        user_id,
+        token,
+        valid_window,
+        "type",
+        ip,
+        callback_url
+    )
 values
-    ($1, $2, $3, $4);
+    ($1, $2, $3, $4, $5, $6, $7);
 
--- name: GetVerificationByToken :one
+-- name: GetPrimedVerificationByToken :one
 select
-    id,
-    user_id,
-    token,
-    "type",
-    expires_at,
-    created_at,
-    used
+    v.*,
+    (created_at + valid_window)::timestamptz as expires_at
 from
-    verifications
+    verifications v
 where
-    token = $1
-    and used = false;
+    v.token = $1
+    and v.status = 'primed'
+    and v.used_at is null
+    and (v.created_at + v.valid_window) <= now()
+limit
+    1;
+
+-- name: GetUnusedVerificationByToken :one
+select
+    v.*,
+    (created_at + valid_window)::timestamptz as expires_at
+from
+    verifications v
+where
+    v.token = $1
+    and v.used = false
+    and (v.created_at + v.valid_window) <= now()
+limit
+    1;
+
+-- name: PrimeVerification :exec
+update verifications
+set
+    status = 'primed'
+where
+    token = $1;
 
 -- name: MarkVerificationUsed :exec
 update verifications
 set
-    used = true,
     used_at = now()
 where
     token = $1;
@@ -153,9 +188,22 @@ select
     id,
     token,
     "type",
-    expires_at
+    (created_at + valid_window)::timestamptz as expires_at
 from
     verifications
 where
     user_id = $1
     and used = false;
+
+-- name: UnusedVerificationExistsByToken :one
+select
+    exists (
+        select
+            1
+        from
+            verifications
+        where
+            token = $1
+            and not used
+            and ((created_at + valid_window) < now())
+    );

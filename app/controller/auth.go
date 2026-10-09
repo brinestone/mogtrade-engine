@@ -215,6 +215,8 @@ func (a *Auth) MountV1(r *gin.RouterGroup) {
 	public.POST("/register/credential", a.handleCredentialRegister)
 	public.GET("/refresh", a.handleAccessTokenRefresh)
 	public.GET("/email-available", a.handleEmailExistsCheck)
+	public.GET("/password-reset/confirm", a.handlePasswordResetConfirm)
+	public.POST("/password-reset/submit", a.handlePasswordResetSubmit)
 	public.POST("/password-reset/request", a.handlePasswordReset)
 }
 

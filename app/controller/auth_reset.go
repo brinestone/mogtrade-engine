@@ -18,7 +18,8 @@ import (
 //	{ "email": "user@example.com" }
 func (a *Auth) handlePasswordReset(c *gin.Context) {
 	var req struct {
-		Email string `json:"email" binding:"required,email"`
+		Email       string `json:"email" binding:"required,email"`
+		CallbackUrl string `json:"callbackUrl" binding:"required,url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -43,11 +44,14 @@ func (a *Auth) handlePasswordReset(c *gin.Context) {
 	//   • call the service,
 	//   • commit on success / rollback on error.
 	output, err := helpers.WithValueTransaction(c.Request.Context(), func(tx pgx.Tx) (auth.ResetPasswordRequestOutput, error) {
-		return auth.ResetPasswordRequest(c.Request.Context(),
+		return auth.BeginPasswordReset(c.Request.Context(),
 			a.repo.WithTx(tx),
 			auth.ResetPasswordRequestInput{
-				Email:         req.Email,
-				ExpireMinutes: expireMinutes,
+				Email:          req.Email,
+				ValidWindow:    time.Minute * time.Duration(expireMinutes),
+				VerificationId: a.idg(),
+				IpAddress:      c.ClientIP(),
+				CallbackUrl:    req.CallbackUrl,
 			})
 	})
 	if err != nil {

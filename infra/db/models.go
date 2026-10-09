@@ -405,6 +405,91 @@ func (ns NullTransactionStatus) Value() (driver.Value, error) {
 	return string(ns.TransactionStatus), nil
 }
 
+type VerificationStatus string
+
+const (
+	VerificationStatusPrimed  VerificationStatus = "primed"
+	VerificationStatusPending VerificationStatus = "pending"
+)
+
+func (e *VerificationStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = VerificationStatus(s)
+	case string:
+		*e = VerificationStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for VerificationStatus: %T", src)
+	}
+	return nil
+}
+
+type NullVerificationStatus struct {
+	VerificationStatus VerificationStatus
+	Valid              bool // Valid is true if VerificationStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullVerificationStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.VerificationStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.VerificationStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullVerificationStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.VerificationStatus), nil
+}
+
+type VerificationType string
+
+const (
+	VerificationTypeEmailReset  VerificationType = "email_reset"
+	VerificationTypeEmailVerify VerificationType = "email_verify"
+	VerificationTypePhoneVerify VerificationType = "phone_verify"
+)
+
+func (e *VerificationType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = VerificationType(s)
+	case string:
+		*e = VerificationType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for VerificationType: %T", src)
+	}
+	return nil
+}
+
+type NullVerificationType struct {
+	VerificationType VerificationType
+	Valid            bool // Valid is true if VerificationType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullVerificationType) Scan(value interface{}) error {
+	if value == nil {
+		ns.VerificationType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.VerificationType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullVerificationType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.VerificationType), nil
+}
+
 type WalletType string
 
 const (
@@ -491,16 +576,6 @@ type User struct {
 	CreatedAt     pgtype.Timestamp
 	UpdatedAt     pgtype.Timestamp
 	Prefs         []byte
-}
-
-type Verification struct {
-	ID        string
-	UserID    string
-	Token     string
-	Type      string
-	ExpiresAt pgtype.Timestamptz
-	CreatedAt pgtype.Timestamptz
-	Used      *bool
 }
 
 type WalletSnapshot struct {
