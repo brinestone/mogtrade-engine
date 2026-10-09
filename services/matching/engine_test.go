@@ -19,7 +19,7 @@ func NewTestLogger(t *testing.T) *slog.Logger {
 
 func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 	logger := NewTestLogger(t)
-	eb := events.UseInMemoryEventBus(t.Context())
+	eb := events.UseInMemoryEventBus()
 	eng := NewMatchingEngine(logger, eb)
 
 	// Insert a sell order at price 100.00 for quantity 5.0
@@ -43,7 +43,7 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 	eng.PlaceMatchOrder(buyOrder)
 
 	// Subscribe to order matched events
-	matches := eb.Subscribe(EventKeyOrderMatched)
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
 	_ev := <-matches
 	ev, ok := _ev.Data.(OrderMatched)
 	if !ok {
@@ -72,7 +72,7 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 
 func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 	logger := NewTestLogger(t)
-	eb := events.UseInMemoryEventBus(t.Context())
+	eb := events.UseInMemoryEventBus()
 	eng := NewMatchingEngine(logger, eb)
 
 	// Insert a sell order at price 200.00
@@ -96,7 +96,7 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 	eng.PlaceMatchOrder(buyOrder)
 
 	// No match event should be generated (or the channel may be empty)
-	matches := eb.Subscribe(EventKeyOrderMatched)
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
 	select {
 	case ev := <-matches:
 		t.Logf("Received unexpected match event: %+v", ev)
@@ -107,7 +107,7 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 
 func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	logger := NewTestLogger(t)
-	eb := events.UseInMemoryEventBus(t.Context())
+	eb := events.UseInMemoryEventBus()
 	eng := NewMatchingEngine(logger, eb)
 
 	// Sell order with qty 10.0 at price 100.0
@@ -131,7 +131,7 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	eng.PlaceMatchOrder(buyOrder)
 
 	// Drain match channel
-	matches := eb.Subscribe(EventKeyOrderMatched)
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
 	_ev := <-matches
 	ev := _ev.Data.(OrderMatched)
 	if ev.BuyOrder != "buy-1" {
