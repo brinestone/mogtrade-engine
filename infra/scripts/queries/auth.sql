@@ -1,3 +1,12 @@
+-- name: SetUserCredentialPassword :exec
+update account
+set
+    "password" = $1,
+    updated_at = now()
+where
+    provider = 'credential'
+    and user_id = $2;
+
 -- name: UserExistsWithId :one
 select
     exists (
@@ -14,7 +23,7 @@ update "user"
 set
     email_verified = true,
     updated_at = now()
-WHERE
+where
     id = $1;
 
 -- name: IsEmailAvailable :one
@@ -77,7 +86,7 @@ SELECT
     *
 FROM
     account
-WHERE
+where
     provider = 'credential'
     and account_id = $1
 limit
@@ -88,9 +97,9 @@ SELECT
     *
 FROM
     "user"
-WHERE
+where
     email = $1
-LIMIT
+limit
     1;
 
 -- name: FindUserById :one
@@ -98,15 +107,15 @@ SELECT
     *
 FROM
     "user"
-WHERE
+where
     id = $1
-LIMIT
+limit
     1;
 
 -- name: CreateUser :one
 INSERT INTO
     "user" (id, name, email, image)
-VALUES
+values
     ($1, $2, $3, $4)
 RETURNING
     created_at;
@@ -114,7 +123,87 @@ RETURNING
 -- name: CreateCredentialAccount :one
 INSERT INTO
     account (provider, id, account_id, user_id, "password")
-VALUES
+values
     ('credential', $1, $2, $3, $4)
 RETURNING
     created_at;
+
+-- name: CreateVerification :exec
+insert into
+    verifications (
+        id,
+        user_id,
+        token,
+        valid_window,
+        "type",
+        ip,
+        callback_url
+    )
+values
+    ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: GetPrimedVerificationByToken :one
+select
+    v.*,
+    (created_at + valid_window)::timestamptz as expires_at
+from
+    verifications v
+where
+    v.token = $1
+    and v.status = 'primed'
+    and v.used_at is null
+    and (v.created_at + v.valid_window) <= now()
+limit
+    1;
+
+-- name: GetUnusedVerificationByToken :one
+select
+    v.*,
+    (created_at + valid_window)::timestamptz as expires_at
+from
+    verifications v
+where
+    v.token = $1
+    and v.used = false
+    and (v.created_at + v.valid_window) <= now()
+limit
+    1;
+
+-- name: PrimeVerification :exec
+update verifications
+set
+    status = 'primed'
+where
+    token = $1;
+
+-- name: MarkVerificationUsed :exec
+update verifications
+set
+    used_at = now()
+where
+    token = $1;
+
+-- name: ListUnusedVerificationsByUser :many
+select
+    id,
+    token,
+    "type",
+    (created_at + valid_window)::timestamptz as expires_at
+from
+    verifications
+where
+    user_id = $1
+    and used = false;
+
+-- name: UnusedVerificationExistsByToken :one
+select
+    exists (
+        select
+            1
+        from
+            verifications
+        where
+            token = $1
+            and not used
+            and ((created_at + valid_window) < now())
+    );

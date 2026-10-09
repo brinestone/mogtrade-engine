@@ -49,6 +49,16 @@ type RotateAccessTokenInput struct {
 	Lifetime       time.Duration
 }
 
+type BeginPasswordResetParams struct {
+	Email          string
+	VerificationId string
+}
+
+type FinishPasswordResetParams struct {
+	NewPassword       string
+	VerificationToken string
+}
+
 var (
 	ErrNoAuthAccountFound   = errors.New("account not found with provided credentials")
 	ErrInavlidCredentials   = errors.New("invalid credentials provided")
@@ -56,7 +66,53 @@ var (
 	ErrRefreshTokenUnusable = errors.New("the provided refreshtoken has been revoked or expired")
 	ErrUserNotFound         = errors.New("user not found")
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
+	ErrVerificationNotFound = errors.New("verification not found or is used")
 )
+
+func FinishPasswordReset(ctx context.Context, q *db.Queries, p FinishPasswordResetParams) error {
+	v, err := q.GetPrimedVerificationByToken(ctx, p.VerificationToken)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrVerificationNotFound
+		}
+		return err
+	}
+
+	accountExists, err := q.CredentialAccountExistsByIdentifier(ctx, v.UserID)
+	if err != nil {
+		return err
+	}
+
+	if !accountExists {
+		return ErrNoAuthAccountFound
+	}
+
+	newPasswordHash, err := HashPassword(p.NewPassword)
+	if err != nil {
+		return err
+	}
+
+	err = q.MarkVerificationUsed(ctx, p.VerificationToken)
+	if err != nil {
+		return err
+	}
+
+	return q.SetUserCredentialPassword(ctx, db.SetUserCredentialPasswordParams{
+		Password: &newPasswordHash,
+		UserID:   v.UserID,
+	})
+}
+
+func PrimeVerification(ctx context.Context, q *db.Queries, token string) error {
+	exists, err := q.UnusedVerificationExistsByToken(ctx, token)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrVerificationNotFound
+	}
+	return q.PrimeVerification(ctx, token)
+}
 
 func UserExistsWithId(ctx context.Context, q *db.Queries, id string) (bool, error) {
 	return q.UserExistsWithId(ctx, id)
