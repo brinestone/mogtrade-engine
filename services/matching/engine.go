@@ -17,10 +17,10 @@ const (
 )
 
 type Engine struct {
-	logger      *slog.Logger
-	orderBookMu sync.Mutex
-	orderBook   map[string]*OrderBook
-	bus         contract.EventBus
+	logger  *slog.Logger
+	booksMu sync.Mutex
+	books   map[string]*OrderBook
+	bus     contract.EventBus
 }
 
 type PlaceMatchOrderParams struct {
@@ -43,17 +43,17 @@ type OrderMatched struct {
 func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
 	// acquire / create the OrderBook for this symbol
 	e.logger.Info("PlaceMatchOrder called", "symbol", p.Symbol, "orderId", p.OrderId, "quantity", p.Quantity, "type", p.Type)
-	book, found := e.orderBook[p.Symbol]
+	book, found := e.books[p.Symbol]
 	if !found {
-		e.orderBookMu.Lock()
+		e.booksMu.Lock()
 		// double‑check under the mutex
-		book, found = e.orderBook[p.Symbol]
+		book, found = e.books[p.Symbol]
 		if !found {
 			book = NewBook()
-			e.orderBook[p.Symbol] = book
-			e.logger.Info("Created new OrderBook for symbol", "symbol", p.Symbol)
+			e.books[p.Symbol] = book
+			e.logger.Info("Created new order book", "symbol", p.Symbol)
 		}
-		e.orderBookMu.Unlock()
+		e.booksMu.Unlock()
 	}
 
 	// add the order to the book (outer lock already released)
@@ -73,15 +73,15 @@ func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
 func (e *Engine) findMatches(symbol string) {
 	// 1. Acquire outer map mutex just long enough to fetch the *OrderBook.
 	e.logger.Info("findMatches: acquiring outer map mutex", "symbol", symbol)
-	hasMutex := e.orderBookMu.TryLock()
+	hasMutex := e.booksMu.TryLock()
 	if !hasMutex {
 		e.logger.Info("findMatches: book mutex is busy. aborting", "symbol", symbol)
 		return
 	}
-	book, ok := e.orderBook[symbol]
+	book, ok := e.books[symbol]
 	if !ok {
 		e.logger.Info("findMatches: no order book for symbol", "symbol", symbol)
-		e.orderBookMu.Unlock()
+		e.booksMu.Unlock()
 		return
 	}
 	e.logger.Info("findMatches: obtained OrderBook", "symbol", symbol)
@@ -226,20 +226,20 @@ func (e *Engine) findMatches(symbol string) {
 
 	// 8. Release the outer map mutex.
 	e.logger.Info("findMatches: releasing outer map mutex", "symbol", symbol)
-	e.orderBookMu.Unlock()
+	e.booksMu.Unlock()
 }
 
 func (e *Engine) findMatches2(symbol string) {
 	l := e.logger.With("symbol", symbol)
-	hasMutex := e.orderBookMu.TryLock()
+	hasMutex := e.booksMu.TryLock()
 	if !hasMutex {
 		l.Info("book mutex is busy, aborting")
 		return
 	}
-	book, found := e.orderBook[symbol]
+	book, found := e.books[symbol]
 	if !found {
 		l.Info("no order book found")
-		e.orderBookMu.Unlock()
+		e.booksMu.Unlock()
 		return
 	}
 	l.Info("obtained order book")
@@ -350,18 +350,18 @@ func (e *Engine) StartAutoMatching(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if len(e.orderBook) <= 0 {
+				if len(e.books) <= 0 {
 					continue
 				}
-				hasMutex := e.orderBookMu.TryLock()
+				hasMutex := e.booksMu.TryLock()
 				if !hasMutex {
 					e.logger.Warn("book mutex is busy, skipping auto matching")
 					continue
 				}
-				for symbol := range e.orderBook {
+				for symbol := range e.books {
 					e.findMatches(symbol)
 				}
-				e.orderBookMu.Unlock()
+				e.booksMu.Unlock()
 			}
 		}
 	}(t)
@@ -369,9 +369,9 @@ func (e *Engine) StartAutoMatching(ctx context.Context) {
 
 func NewMatchingEngine(l *slog.Logger, eb contract.EventBus) *Engine {
 	return &Engine{
-		logger:      l.With("service", "matching-engine"),
-		orderBookMu: sync.Mutex{},
-		orderBook:   make(map[string]*OrderBook),
-		bus:         eb,
+		logger:  l.With("service", "matching-engine"),
+		booksMu: sync.Mutex{},
+		books:   make(map[string]*OrderBook),
+		bus:     eb,
 	}
 }
