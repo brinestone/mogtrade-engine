@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -121,7 +122,16 @@ func (k *KYC) handleGetPendingRequirements(c *gin.Context) {
 	// Get KYC record for this user
 	record, err := kyc.GetByUser(c.Request.Context(), k.q, userID)
 	if err != nil {
-		if !errors.Is(err, kyc.ErrKycNotFound) {
+		if errors.Is(err, kyc.ErrKycNotFound) {
+			k.logger.Warn("kyc record not found")
+			c.JSON(http.StatusNoContent, gin.H{
+				"status":  "no_kyc_record",
+				"pending": []string{"submit_kyc_application"},
+				"message": "No KYC record found for this user. Please start the KYC verification process.",
+			})
+			return
+		}
+		if !errors.Is(err, kyc.ErrKycAlreadyExists) {
 			statusStr = string(contract.KYCPending)
 		} else {
 			k.logger.Error("could not get kyc record", "uid", userID, "err", err.Error())
@@ -169,7 +179,58 @@ func (k *KYC) handleApprove(c *gin.Context) {
 
 func (k *KYC) handleReject(c *gin.Context) {}
 
-func (k *KYC) handleUpdateDocuments(c *gin.Context) {}
+func (k *KYC) handleUpdateDocuments(c *gin.Context) {
+	userID := helpers.GetCurrentUserId(c)
+
+	type UpdateDocsParams struct {
+		Type        string `json:"type" binding:"required"`                  // front, back, selfie, proof_of_address
+		URL         string `json:"url" binding:"required,url"`               // S3 URL
+		Fingerprint string `json:"fingerprint" binding:"required,length=64"` // SHA256 hash of uploaded file
+	}
+
+	var params UpdateDocsParams
+	if err := c.ShouldBind(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+
+	validDocTypes := []string{"selfie", "back", "front", "proof_of_address"}
+	if isInvalidType := !slices.Contains(validDocTypes, params.Type); isInvalidType {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid file type", "validTypes": validDocTypes})
+		return
+	}
+
+	// Verify fingerprint against object store
+	object, err := k.store.FindObjectWithFingerprint(c.Request.Context(), contract.FindObjectWithFingerprintParams{
+		Fingerprint: params.Fingerprint,
+	})
+	if err != nil {
+		k.logger.Error("could not get object by fingerprint", "err", err.Error())
+		helpers.InternalServerError(c)
+		return
+	} else if object.Fingerprint == "" && object.Name == "" {
+
+	}
+
+	// Update document
+	err = kyc.UpdateDocuments(c.Request.Context(), k.q, kyc.UpdateDocumentsParams{
+		UserID:      userID,
+		IdentityDoc: contract.IdentityDocument{},
+	})
+	if err != nil {
+		k.logger.Error("failed to update documents", "uid", userID, "err", err)
+		helpers.InternalServerError(c)
+		return
+	}
+
+	k.logger.Info("documents updated", "uid", userID, "type", params.Type)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "updated",
+		"type":    params.Type,
+		"message": "Documents successfully updated",
+	})
+}
 
 func (k *KYC) handleBeginVerifying(c *gin.Context) {}
 
@@ -187,8 +248,8 @@ func (k *KYC) MountV1(r *gin.RouterGroup) {
 
 	verifier := secured.Group("", verifierMiddleware(contract.RoleKycVerifier))
 	verifier.POST("/verify", k.handleBeginVerifying)
-	verifier.PATCH("/:verification/reject", k.handleReject)
-	verifier.PATCH("/:verification/approve", k.handleApprove)
+	verifier.PATCH("/:user/reject", k.handleReject)
+	verifier.PATCH("/:user/approve", k.handleApprove)
 
 	// Public endpoint for generating presigned URLs for KYC document uploads
 	public := router.Group("")

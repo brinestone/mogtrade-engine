@@ -21,6 +21,26 @@ type MinIOStorage struct {
 	client *minio.Client
 }
 
+func (m *MinIOStorage) FindObjectWithFingerprint(ctx context.Context, params contract.FindObjectWithFingerprintParams) (contract.StorageObject, error) {
+	if params.Bucket == "" {
+		params.Bucket = m.Bucket
+	}
+
+	for object := range m.client.ListObjects(ctx, params.Bucket, minio.ListObjectsOptions{
+		WithMetadata: true,
+		Recursive:    true,
+	}) {
+		if object.ChecksumSHA256 == params.Fingerprint {
+			return contract.StorageObject{
+				Fingerprint: object.ChecksumSHA256,
+				Name:        object.Key,
+			}, nil
+		}
+	}
+
+	return contract.StorageObject{}, nil
+}
+
 func (m *MinIOStorage) GeneratePresignedUploadURL(ctx context.Context, params contract.PresignUrlParams) (string, error) {
 	if params.Bucket == "" {
 		params.Bucket = m.Bucket

@@ -139,6 +139,26 @@ where
 limit
     1;
 
+-- name: LookupKycRecordByID :one
+select
+    k.id,
+    k.user_id,
+    k.status,
+    k.ready,
+    (k.created_at + k.valid_window)::timestamptz as expires_at,
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
+from
+    kyc_records k
+where
+    k.id = $1
+limit
+    1;
+
 -- name: CreateKycRecord :exec
 insert into
     kyc_records (id, valid_window, user_id, verification_window)
