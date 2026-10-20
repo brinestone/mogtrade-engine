@@ -240,7 +240,7 @@ func (q *Queries) FindUserById(ctx context.Context, id string) (User, error) {
 
 const getPrimedVerificationByToken = `-- name: GetPrimedVerificationByToken :one
 select
-    v.id, v.user_id, v.token, v.type, v.valid_window, v.created_at, v.used_at, v.status, v.used, v.ip, v.callback_url,
+    v.id, v.user_id, v.token, v.valid_window, v.type, v.ip, v.callback_url, v.status, v.created_at, v.used_at, v.used,
     (created_at + valid_window)::timestamptz as expires_at
 from
     verifications v
@@ -257,14 +257,14 @@ type GetPrimedVerificationByTokenRow struct {
 	ID          string
 	UserID      string
 	Token       string
-	Type        VerificationType
 	ValidWindow string
-	CreatedAt   pgtype.Timestamptz
-	UsedAt      pgtype.Timestamptz
-	Status      *VerificationStatus
-	Used        *bool
+	Type        VerificationType
 	Ip          string
 	CallbackUrl *string
+	Status      VerificationStatus
+	CreatedAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
+	Used        *bool
 	ExpiresAt   pgtype.Timestamptz
 }
 
@@ -275,14 +275,14 @@ func (q *Queries) GetPrimedVerificationByToken(ctx context.Context, token string
 		&i.ID,
 		&i.UserID,
 		&i.Token,
-		&i.Type,
 		&i.ValidWindow,
-		&i.CreatedAt,
-		&i.UsedAt,
-		&i.Status,
-		&i.Used,
+		&i.Type,
 		&i.Ip,
 		&i.CallbackUrl,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UsedAt,
+		&i.Used,
 		&i.ExpiresAt,
 	)
 	return i, err
@@ -290,7 +290,7 @@ func (q *Queries) GetPrimedVerificationByToken(ctx context.Context, token string
 
 const getUnusedVerificationByToken = `-- name: GetUnusedVerificationByToken :one
 select
-    v.id, v.user_id, v.token, v.type, v.valid_window, v.created_at, v.used_at, v.status, v.used, v.ip, v.callback_url,
+    v.id, v.user_id, v.token, v.valid_window, v.type, v.ip, v.callback_url, v.status, v.created_at, v.used_at, v.used,
     (created_at + valid_window)::timestamptz as expires_at
 from
     verifications v
@@ -306,14 +306,14 @@ type GetUnusedVerificationByTokenRow struct {
 	ID          string
 	UserID      string
 	Token       string
-	Type        VerificationType
 	ValidWindow string
-	CreatedAt   pgtype.Timestamptz
-	UsedAt      pgtype.Timestamptz
-	Status      *VerificationStatus
-	Used        *bool
+	Type        VerificationType
 	Ip          string
 	CallbackUrl *string
+	Status      VerificationStatus
+	CreatedAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
+	Used        *bool
 	ExpiresAt   pgtype.Timestamptz
 }
 
@@ -324,14 +324,14 @@ func (q *Queries) GetUnusedVerificationByToken(ctx context.Context, token string
 		&i.ID,
 		&i.UserID,
 		&i.Token,
-		&i.Type,
 		&i.ValidWindow,
-		&i.CreatedAt,
-		&i.UsedAt,
-		&i.Status,
-		&i.Used,
+		&i.Type,
 		&i.Ip,
 		&i.CallbackUrl,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UsedAt,
+		&i.Used,
 		&i.ExpiresAt,
 	)
 	return i, err
