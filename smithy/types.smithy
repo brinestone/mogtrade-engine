@@ -47,6 +47,14 @@ structure UnauthorizedError {
     error: String
 }
 
+@error("client")
+@httpError(403)
+@documentation("The authenticated user does not have the required role/permission")
+structure ForbiddenError {
+    @required
+    error: String
+}
+
 @pattern("^[0-9A-HJKMNP-TV-Z]{26}$")
 string Ulid
 
@@ -98,3 +106,31 @@ STOP_LIMIT = "stop_limit"
 string NumericString
 @pattern("^[A-Z]{3}$")
 string Currency
+
+/// The gender of a KYC profile holder.
+enum Gender {
+    MALE = "male"
+    FEMALE = "female"
+    UNDEFINED = "undefined"
+}
+
+/// The verification status of a KYC record.
+enum KYCStatus {
+    /// Documents submitted; awaiting admin review.
+    PENDING = "pending"
+    /// An admin review is actively in progress.
+    VERIFYING = "verifying"
+    /// Verification was successful.
+    VERIFIED = "verified"
+    /// Verification was rejected.
+    REJECTED = "rejected"
+    /// The KYC record has expired and must be renewed.
+    EXPIRED = "expired"
+}
+
+/// The risk level assigned to a customer after KYC verification.
+enum KYCRiskProfile {
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+}
