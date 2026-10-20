@@ -56,6 +56,17 @@ set
 where
     user_id = $1;
 
+-- name: UpdateKycProfile :exec
+update kyc_records
+set
+    updated_at = now(),
+    legal_names = $2,
+    gender = $3,
+    dob = $4,
+    address = $5
+where
+    user_id = $1;
+
 -- name: SetKycStatus :exec
 update kyc_records
 set
