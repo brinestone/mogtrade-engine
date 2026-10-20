@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -30,6 +31,25 @@ func (s *S3Storage) FindObjectWithFingerprint(ctx context.Context, params contra
 		params.Bucket = s.Bucket
 	}
 
+	if params.ObjectName != "" {
+		head, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+			Bucket: &params.Bucket,
+			Key:    &params.ObjectName,
+		})
+		if err == nil {
+			etag := strings.Trim(aws.ToString(head.ETag), "\"")
+			sha := aws.ToString(head.ChecksumSHA256)
+			if (sha != "" && sha == params.Fingerprint) ||
+				(etag != "" && etag == params.Fingerprint) {
+				return contract.StorageObject{
+					Fingerprint: params.Fingerprint,
+					Name:        params.ObjectName,
+				}, nil
+			}
+		}
+		return contract.StorageObject{}, nil
+	}
+
 	objs, err := s.client.ListObjects(ctx, &s3.ListObjectsInput{
 		Bucket: &params.Bucket,
 	})
@@ -37,9 +57,10 @@ func (s *S3Storage) FindObjectWithFingerprint(ctx context.Context, params contra
 		return contract.StorageObject{}, err
 	}
 	for _, object := range objs.Contents {
-		if object.ETag != nil && *object.ETag == aws.ToString(object.ETag) {
+		etag := strings.Trim(aws.ToString(object.ETag), "\"")
+		if etag == params.Fingerprint {
 			return contract.StorageObject{
-				Fingerprint: aws.ToString(object.ETag),
+				Fingerprint: params.Fingerprint,
 				Name:        aws.ToString(object.Key),
 			}, nil
 		}

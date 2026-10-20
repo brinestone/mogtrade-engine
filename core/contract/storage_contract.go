@@ -21,6 +21,7 @@ type StorageObject struct {
 
 type FindObjectWithFingerprintParams struct {
 	Bucket      string
+	ObjectName  string
 	Fingerprint string
 }
 

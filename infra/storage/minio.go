@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/brinestone/mogtrade/core/contract"
@@ -26,13 +27,29 @@ func (m *MinIOStorage) FindObjectWithFingerprint(ctx context.Context, params con
 		params.Bucket = m.Bucket
 	}
 
+	if params.ObjectName != "" {
+		info, err := m.client.StatObject(ctx, params.Bucket, params.ObjectName, minio.StatObjectOptions{})
+		if err == nil {
+			etag := strings.Trim(info.ETag, "\"")
+			if (info.ChecksumSHA256 != "" && info.ChecksumSHA256 == params.Fingerprint) ||
+				(etag != "" && etag == params.Fingerprint) {
+				return contract.StorageObject{
+					Fingerprint: params.Fingerprint,
+					Name:        info.Key,
+				}, nil
+			}
+		}
+		return contract.StorageObject{}, nil
+	}
+
 	for object := range m.client.ListObjects(ctx, params.Bucket, minio.ListObjectsOptions{
 		WithMetadata: true,
 		Recursive:    true,
 	}) {
-		if object.ChecksumSHA256 == params.Fingerprint {
+		etag := strings.Trim(object.ETag, "\"")
+		if object.ChecksumSHA256 == params.Fingerprint || etag == params.Fingerprint {
 			return contract.StorageObject{
-				Fingerprint: object.ChecksumSHA256,
+				Fingerprint: params.Fingerprint,
 				Name:        object.Key,
 			}, nil
 		}
