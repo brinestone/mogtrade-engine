@@ -10,6 +10,7 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
@@ -39,6 +40,14 @@ type UpdateDocumentsParams struct {
 	UserID         string
 	IdentityDoc    contract.IdentityDocument
 	ProofOfAddress contract.ProofOfAddressDocument
+}
+
+type UpdateProfileParams struct {
+	UserID     string
+	LegalNames string
+	Gender     contract.Gender
+	Dob        time.Time
+	Address    any
 }
 
 type VerifyParams struct {
@@ -104,6 +113,69 @@ func GetByUser(ctx context.Context, q *db.Queries, userID string) (contract.Look
 	}
 
 	return mapGetRow(row)
+}
+
+// GetByID returns the KYC record by its ID.
+func GetByID(ctx context.Context, q *db.Queries, id string) (contract.LookupKycRecord, error) {
+	if id == "" {
+		return contract.LookupKycRecord{}, errors.New("kyc id is required")
+	}
+	row, err := q.LookupKycRecordByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contract.LookupKycRecord{}, ErrKycNotFound
+		}
+		return contract.LookupKycRecord{}, err
+	}
+
+	return mapRecord(
+		row.ID,
+		*row.UserID,
+		string(row.Status),
+		row.ExpiresAt.Time,
+		row.VerifyBefore.Time,
+		row.Usable,
+		row.Ready,
+	)
+}
+
+// UpdateProfile updates the personal details on a user's KYC record.
+func UpdateProfile(ctx context.Context, q *db.Queries, p UpdateProfileParams) error {
+	if p.UserID == "" {
+		return ErrEmptyUserID
+	}
+	if p.LegalNames == "" {
+		return errors.New("legal names is required")
+	}
+
+	var addressBytes []byte
+	if p.Address != nil {
+		var err error
+		addressBytes, err = json.Marshal(p.Address)
+		if err != nil {
+			return fmt.Errorf("marshal address: %w", err)
+		}
+	}
+
+	var dbGender db.Gender
+	switch p.Gender {
+	case contract.GenderMale:
+		dbGender = db.GenderMale
+	case contract.GenderFemale:
+		dbGender = db.GenderFemale
+	case contract.GenderUndefined:
+		dbGender = db.GenderUndefined
+	default:
+		return errors.New("invalid gender")
+	}
+
+	return q.UpdateKycProfile(ctx, db.UpdateKycProfileParams{
+		UserID:     &p.UserID,
+		LegalNames: &p.LegalNames,
+		Gender:     &dbGender,
+		Dob:        pgtype.Date{Time: p.Dob, Valid: !p.Dob.IsZero()},
+		Address:    addressBytes,
+	})
 }
 
 // UpdateDocuments replaces document references and resets the record to pending.
