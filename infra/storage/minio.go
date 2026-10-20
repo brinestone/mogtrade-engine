@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/brinestone/mogtrade/core/contract"
@@ -19,6 +20,42 @@ import (
 type MinIOStorage struct {
 	StorageConfig
 	client *minio.Client
+}
+
+func (m *MinIOStorage) FindObjectWithFingerprint(ctx context.Context, params contract.FindObjectWithFingerprintParams) (contract.StorageObject, error) {
+	if params.Bucket == "" {
+		params.Bucket = m.Bucket
+	}
+
+	if params.ObjectName != "" {
+		info, err := m.client.StatObject(ctx, params.Bucket, params.ObjectName, minio.StatObjectOptions{})
+		if err == nil {
+			etag := strings.Trim(info.ETag, "\"")
+			if (info.ChecksumSHA256 != "" && info.ChecksumSHA256 == params.Fingerprint) ||
+				(etag != "" && etag == params.Fingerprint) {
+				return contract.StorageObject{
+					Fingerprint: params.Fingerprint,
+					Name:        info.Key,
+				}, nil
+			}
+		}
+		return contract.StorageObject{}, nil
+	}
+
+	for object := range m.client.ListObjects(ctx, params.Bucket, minio.ListObjectsOptions{
+		WithMetadata: true,
+		Recursive:    true,
+	}) {
+		etag := strings.Trim(object.ETag, "\"")
+		if object.ChecksumSHA256 == params.Fingerprint || etag == params.Fingerprint {
+			return contract.StorageObject{
+				Fingerprint: params.Fingerprint,
+				Name:        object.Key,
+			}, nil
+		}
+	}
+
+	return contract.StorageObject{}, nil
 }
 
 func (m *MinIOStorage) GeneratePresignedUploadURL(ctx context.Context, params contract.PresignUrlParams) (string, error) {

@@ -248,6 +248,52 @@ func (q *Queries) LookupActiveKycForUser(ctx context.Context, userID *string) (L
 	return i, err
 }
 
+const lookupKycRecordByID = `-- name: LookupKycRecordByID :one
+select
+    k.id,
+    k.user_id,
+    k.status,
+    k.ready,
+    (k.created_at + k.valid_window)::timestamptz as expires_at,
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
+from
+    kyc_records k
+where
+    k.id = $1
+limit
+    1
+`
+
+type LookupKycRecordByIDRow struct {
+	ID           string
+	UserID       *string
+	Status       KycStatus
+	Ready        *bool
+	ExpiresAt    pgtype.Timestamptz
+	Usable       bool
+	VerifyBefore pgtype.Timestamptz
+}
+
+func (q *Queries) LookupKycRecordByID(ctx context.Context, id string) (LookupKycRecordByIDRow, error) {
+	row := q.db.QueryRow(ctx, lookupKycRecordByID, id)
+	var i LookupKycRecordByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.Ready,
+		&i.ExpiresAt,
+		&i.Usable,
+		&i.VerifyBefore,
+	)
+	return i, err
+}
+
 const lookupKycRecordByUser = `-- name: LookupKycRecordByUser :one
 select
     k.id,
@@ -374,6 +420,37 @@ type UpdateKycDocumentsParams struct {
 
 func (q *Queries) UpdateKycDocuments(ctx context.Context, arg UpdateKycDocumentsParams) error {
 	_, err := q.db.Exec(ctx, updateKycDocuments, arg.UserID, arg.IdentityDoc, arg.ProofOfAddress)
+	return err
+}
+
+const updateKycProfile = `-- name: UpdateKycProfile :exec
+update kyc_records
+set
+    updated_at = now(),
+    legal_names = $2,
+    gender = $3,
+    dob = $4,
+    address = $5
+where
+    user_id = $1
+`
+
+type UpdateKycProfileParams struct {
+	UserID     *string
+	LegalNames *string
+	Gender     *Gender
+	Dob        pgtype.Date
+	Address    []byte
+}
+
+func (q *Queries) UpdateKycProfile(ctx context.Context, arg UpdateKycProfileParams) error {
+	_, err := q.db.Exec(ctx, updateKycProfile,
+		arg.UserID,
+		arg.LegalNames,
+		arg.Gender,
+		arg.Dob,
+		arg.Address,
+	)
 	return err
 }
 

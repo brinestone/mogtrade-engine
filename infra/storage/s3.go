@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -22,6 +24,48 @@ import (
 type S3Storage struct {
 	StorageConfig
 	client *s3.Client
+}
+
+func (s *S3Storage) FindObjectWithFingerprint(ctx context.Context, params contract.FindObjectWithFingerprintParams) (contract.StorageObject, error) {
+	if params.Bucket == "" {
+		params.Bucket = s.Bucket
+	}
+
+	if params.ObjectName != "" {
+		head, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+			Bucket: &params.Bucket,
+			Key:    &params.ObjectName,
+		})
+		if err == nil {
+			etag := strings.Trim(aws.ToString(head.ETag), "\"")
+			sha := aws.ToString(head.ChecksumSHA256)
+			if (sha != "" && sha == params.Fingerprint) ||
+				(etag != "" && etag == params.Fingerprint) {
+				return contract.StorageObject{
+					Fingerprint: params.Fingerprint,
+					Name:        params.ObjectName,
+				}, nil
+			}
+		}
+		return contract.StorageObject{}, nil
+	}
+
+	objs, err := s.client.ListObjects(ctx, &s3.ListObjectsInput{
+		Bucket: &params.Bucket,
+	})
+	if err != nil {
+		return contract.StorageObject{}, err
+	}
+	for _, object := range objs.Contents {
+		etag := strings.Trim(aws.ToString(object.ETag), "\"")
+		if etag == params.Fingerprint {
+			return contract.StorageObject{
+				Fingerprint: params.Fingerprint,
+				Name:        aws.ToString(object.Key),
+			}, nil
+		}
+	}
+	return contract.StorageObject{}, nil
 }
 
 func (s *S3Storage) GeneratePresignedUploadURL(ctx context.Context, params contract.PresignUrlParams) (string, error) {

@@ -95,6 +95,9 @@ func setupDbConnection(ctx context.Context) error {
 }
 
 func setupAdapters(ctx context.Context) error {
+	ioc.Factory(func() contract.RoleAuthorizer {
+		return &contract.DefaultRoleAuthorizer{}
+	})
 	err := ioc.Factory(func() (contract.ObjectStorage, error) {
 		p, accessKey, secret, endpoint, region := os.Getenv("S3_PLATFORM"), os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET"), os.Getenv("S3_ORIGIN"), os.Getenv("S3_REGION")
 

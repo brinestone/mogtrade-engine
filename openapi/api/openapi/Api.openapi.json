@@ -143,6 +143,183 @@
                 ]
             }
         },
+        "/api/v1/auth/password-reset/confirm": {
+            "get": {
+                "description": "Validates a password-reset token and redirects to the client-supplied callback URL. Marks the verification token as primed so it can only be used once.",
+                "operationId": "ConfirmPasswordReset",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "description": "The raw verification token received via email",
+                        "schema": {
+                            "type": "string",
+                            "description": "The raw verification token received via email"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ConfirmPasswordReset 200 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "UnprocessibleError 422 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnprocessibleErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/api/v1/auth/password-reset/request": {
+            "post": {
+                "description": "Initiate a password-reset flow. Sends a reset link to the supplied email address if an account exists.",
+                "operationId": "RequestPasswordReset",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RequestPasswordResetRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "202": {
+                        "description": "RequestPasswordReset 202 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/api/v1/auth/password-reset/submit": {
+            "post": {
+                "description": "Completes the password-reset flow by applying the new password. The verification token must have been primed via ConfirmPasswordReset first.",
+                "operationId": "SubmitPasswordReset",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubmitPasswordResetRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "202": {
+                        "description": "SubmitPasswordReset 202 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "UnprocessibleError 422 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnprocessibleErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
         "/api/v1/auth/refresh": {
             "get": {
                 "description": "Rotate access token",
@@ -269,6 +446,599 @@
                 "security": [],
                 "tags": [
                     "Auth"
+                ]
+            }
+        },
+        "/api/v1/kyc": {
+            "get": {
+                "description": "Returns the KYC status for the authenticated user, including the list of pending actions.",
+                "operationId": "GetKycStatus",
+                "responses": {
+                    "200": {
+                        "description": "GetKycStatus 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetKycStatusResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC"
+                ]
+            },
+            "post": {
+                "description": "Opens a new KYC verification flow for the authenticated user. Returns 102 Processing if a KYC record already exists.",
+                "operationId": "BeginKyc",
+                "responses": {
+                    "200": {
+                        "description": "BeginKyc 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BeginKycResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC"
+                ]
+            }
+        },
+        "/api/v1/kyc/applications": {
+            "get": {
+                "description": "Lists all KYC applications. Optionally filters by risk profile. Requires kyc_verifier, admin, or compliance role.",
+                "operationId": "ListKycApplications",
+                "parameters": [
+                    {
+                        "name": "risk_profile",
+                        "in": "query",
+                        "description": "Optional risk profile filter. Allowed values: low, medium, high",
+                        "schema": {
+                            "$ref": "#/components/schemas/KYCRiskProfile"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ListKycApplications 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListKycApplicationsResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "ForbiddenError 403 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForbiddenErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC",
+                    "Admin"
+                ]
+            }
+        },
+        "/api/v1/kyc/documents": {
+            "post": {
+                "description": "Batch-uploads KYC document fingerprints. At least one document must be provided. Each document's fingerprint is verified against the object store before being saved.",
+                "operationId": "UpdateKycDocuments",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateKycDocumentsRequestContent"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "UpdateKycDocuments 200 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "UnprocessibleError 422 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnprocessibleErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC"
+                ]
+            }
+        },
+        "/api/v1/kyc/presigned-upload": {
+            "get": {
+                "description": "Generates one or more presigned PUT URLs for uploading KYC documents directly to object storage. Requires at least one document type query parameter. Optionally requires authentication.",
+                "operationId": "GetPresignedUploadUrl",
+                "parameters": [
+                    {
+                        "name": "types",
+                        "in": "query",
+                        "description": "Comma-separated list of document types to generate upload URLs for. Allowed values: front, back, selfie, proof_of_address",
+                        "schema": {
+                            "type": "string",
+                            "description": "Comma-separated list of document types to generate upload URLs for. Allowed values: front, back, selfie, proof_of_address"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GetPresignedUploadUrl 200 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GetPresignedUploadUrlResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "KYC"
+                ]
+            }
+        },
+        "/api/v1/kyc/profile": {
+            "post": {
+                "description": "Updates the KYC profile for the authenticated user with personal details required for verification.",
+                "operationId": "UpdateKycProfile",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateKycProfileRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "UpdateKycProfile 200 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC"
+                ]
+            }
+        },
+        "/api/v1/kyc/verify": {
+            "post": {
+                "description": "Marks a KYC application as 'verifying' (admin review in progress). Requires kyc_verifier, admin, or compliance role.",
+                "operationId": "BeginKycVerification",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BeginKycVerificationRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "BeginKycVerification 200 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "ForbiddenError 403 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForbiddenErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC",
+                    "Admin"
+                ]
+            }
+        },
+        "/api/v1/kyc/{user}/approve": {
+            "patch": {
+                "description": "Approves a KYC application, marking the user as verified. Optionally sets a risk profile. Requires kyc_verifier, admin, or compliance role.",
+                "operationId": "ApproveKyc",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ApproveKycRequestContent"
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "description": "The ID of the user being approved",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+                            "description": "The ID of the user being approved"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ApproveKyc 200 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "ForbiddenError 403 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForbiddenErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC",
+                    "Admin"
+                ]
+            }
+        },
+        "/api/v1/kyc/{user}/reject": {
+            "patch": {
+                "description": "Rejects a KYC application with a reason. Requires kyc_verifier, admin, or compliance role.",
+                "operationId": "RejectKyc",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RejectKycRequestContent"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "description": "The ID of the user being rejected",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+                            "description": "The ID of the user being rejected"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "RejectKyc 200 response"
+                    },
+                    "400": {
+                        "description": "ValidationError 400 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "UnauthorizedError 401 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnauthorizedErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "ForbiddenError 403 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForbiddenErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "NotFoundError 404 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotFoundErrorResponseContent"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "InternalServerError 500 response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InternalServerErrorResponseContent"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "KYC",
+                    "Admin"
                 ]
             }
         },
@@ -515,6 +1285,39 @@
     },
     "components": {
         "schemas": {
+            "ApproveKycRequestContent": {
+                "type": "object",
+                "properties": {
+                    "riskProfile": {
+                        "$ref": "#/components/schemas/KYCRiskProfile"
+                    }
+                }
+            },
+            "BeginKycResponseContent": {
+                "type": "object",
+                "properties": {
+                    "expiresAt": {
+                        "type": "string",
+                        "description": "The RFC 3339 timestamp by which the KYC must be completed"
+                    }
+                },
+                "required": [
+                    "expiresAt"
+                ]
+            },
+            "BeginKycVerificationRequestContent": {
+                "type": "object",
+                "properties": {
+                    "userId": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+                        "description": "The ID of the user whose KYC is being reviewed"
+                    }
+                },
+                "required": [
+                    "userId"
+                ]
+            },
             "CheckEmailAvailableResponseContent": {
                 "type": "object",
                 "properties": {
@@ -611,6 +1414,28 @@
                     "password"
                 ]
             },
+            "DocumentUploadItem": {
+                "type": "object",
+                "properties": {
+                    "objectName": {
+                        "type": "string",
+                        "description": "The object/storage key name returned by the presigned-upload endpoint"
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "The public or internal URL of the uploaded document"
+                    },
+                    "fingerprint": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 64,
+                        "description": "SHA-256 hex fingerprint of the uploaded file, used to verify integrity"
+                    }
+                },
+                "required": [
+                    "fingerprint"
+                ]
+            },
             "FindOrderResponseContent": {
                 "type": "object",
                 "properties": {
@@ -666,6 +1491,61 @@
                     "updatedAt"
                 ]
             },
+            "ForbiddenErrorResponseContent": {
+                "type": "object",
+                "description": "The authenticated user does not have the required role/permission",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "error"
+                ]
+            },
+            "Gender": {
+                "type": "string",
+                "description": "The gender of a KYC profile holder.",
+                "enum": [
+                    "male",
+                    "female",
+                    "undefined"
+                ]
+            },
+            "GetKycStatusResponseContent": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/KYCStatus"
+                    },
+                    "expiresAt": {
+                        "type": "number",
+                        "description": "RFC 3339 timestamp when the KYC record expires",
+                        "format": "double"
+                    },
+                    "verifyBefore": {
+                        "type": "number",
+                        "description": "RFC 3339 deadline by which verification must be completed",
+                        "format": "double"
+                    },
+                    "pending": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "List of actions the user still needs to take"
+                    },
+                    "isReady": {
+                        "type": "boolean",
+                        "description": "Whether the profile is complete enough to submit for verification"
+                    }
+                },
+                "required": [
+                    "isReady",
+                    "pending",
+                    "status"
+                ]
+            },
             "GetOrdersResponseContent": {
                 "type": "object",
                 "properties": {
@@ -683,6 +1563,23 @@
                 "required": [
                     "data"
                 ]
+            },
+            "GetPresignedUploadUrlResponseContent": {
+                "type": "object",
+                "properties": {
+                    "front": {
+                        "$ref": "#/components/schemas/PresignedUploadInfo"
+                    },
+                    "back": {
+                        "$ref": "#/components/schemas/PresignedUploadInfo"
+                    },
+                    "selfie": {
+                        "$ref": "#/components/schemas/PresignedUploadInfo"
+                    },
+                    "proofOfAddress": {
+                        "$ref": "#/components/schemas/PresignedUploadInfo"
+                    }
+                }
             },
             "GetWalletInfoResponseContent": {
                 "type": "object",
@@ -719,6 +1616,79 @@
                 },
                 "required": [
                     "error"
+                ]
+            },
+            "KYCRiskProfile": {
+                "type": "string",
+                "description": "The risk level assigned to a customer after KYC verification.",
+                "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                ]
+            },
+            "KYCStatus": {
+                "type": "string",
+                "description": "The verification status of a KYC record.",
+                "enum": [
+                    "pending",
+                    "verifying",
+                    "verified",
+                    "rejected",
+                    "expired"
+                ]
+            },
+            "KycRecordSummary": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "userId": {
+                        "type": "string",
+                        "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/KYCStatus"
+                    },
+                    "expiresAt": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "verifyBefore": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "isReady": {
+                        "type": "boolean"
+                    },
+                    "usable": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "userId"
+                ]
+            },
+            "ListKycApplicationsResponseContent": {
+                "type": "object",
+                "properties": {
+                    "records": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KycRecordSummary"
+                        }
+                    },
+                    "count": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "count",
+                    "records"
                 ]
             },
             "NotFoundErrorResponseContent": {
@@ -857,6 +1827,71 @@
                     "walletType"
                 ]
             },
+            "PresignedUploadInfo": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The presigned URL to PUT the file to"
+                    },
+                    "objectName": {
+                        "type": "string",
+                        "description": "The object name / storage key to reference when submitting documents"
+                    },
+                    "expiresAt": {
+                        "type": "number",
+                        "description": "Unix timestamp (seconds) when the presigned URL expires"
+                    },
+                    "allowedTypes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "List of accepted MIME types for this document type"
+                    },
+                    "httpMethod": {
+                        "type": "string",
+                        "description": "HTTP method to use when uploading (always PUT)"
+                    }
+                },
+                "required": [
+                    "allowedTypes",
+                    "expiresAt",
+                    "httpMethod",
+                    "objectName",
+                    "url"
+                ]
+            },
+            "RejectKycRequestContent": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "Human-readable reason for the rejection"
+                    }
+                },
+                "required": [
+                    "reason"
+                ]
+            },
+            "RequestPasswordResetRequestContent": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
+                        "description": "The email address of the account to reset"
+                    },
+                    "callbackUrl": {
+                        "type": "string",
+                        "description": "A URL the server will embed in the reset email. The server appends ?vt=<token> to this URL before redirecting."
+                    }
+                },
+                "required": [
+                    "callbackUrl",
+                    "email"
+                ]
+            },
             "RotateAccessTokenResponseContent": {
                 "type": "object",
                 "properties": {
@@ -872,6 +1907,26 @@
                 "required": [
                     "accessToken",
                     "refreshToken"
+                ]
+            },
+            "SubmitPasswordResetRequestContent": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string",
+                        "description": "The raw verification token from the reset email"
+                    },
+                    "newPassword": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 12,
+                        "description": "The new password. Must be at least 12 characters long.",
+                        "format": "password"
+                    }
+                },
+                "required": [
+                    "newPassword",
+                    "token"
                 ]
             },
             "UnauthorizedErrorResponseContent": {
@@ -898,6 +1953,51 @@
                 },
                 "required": [
                     "error"
+                ]
+            },
+            "UpdateKycDocumentsRequestContent": {
+                "type": "object",
+                "properties": {
+                    "front": {
+                        "$ref": "#/components/schemas/DocumentUploadItem"
+                    },
+                    "back": {
+                        "$ref": "#/components/schemas/DocumentUploadItem"
+                    },
+                    "selfie": {
+                        "$ref": "#/components/schemas/DocumentUploadItem"
+                    },
+                    "proofOfAddress": {
+                        "$ref": "#/components/schemas/DocumentUploadItem"
+                    },
+                    "baseUri": {
+                        "type": "string",
+                        "description": "Optional base URI for the identity document bundle"
+                    }
+                }
+            },
+            "UpdateKycProfileRequestContent": {
+                "type": "object",
+                "properties": {
+                    "legalNames": {
+                        "type": "string",
+                        "description": "The user's full legal name(s) as they appear on official documents"
+                    },
+                    "gender": {
+                        "$ref": "#/components/schemas/Gender"
+                    },
+                    "dob": {
+                        "type": "string",
+                        "description": "Date of birth in YYYY-MM-DD or RFC 3339 format"
+                    },
+                    "address": {
+                        "description": "The user's residential address (free-form JSON object)"
+                    }
+                },
+                "required": [
+                    "dob",
+                    "gender",
+                    "legalNames"
                 ]
             },
             "ValidationErrorResponseContent": {

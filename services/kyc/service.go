@@ -42,6 +42,14 @@ type UpdateDocumentsParams struct {
 	ProofOfAddress contract.ProofOfAddressDocument
 }
 
+type UpdateProfileParams struct {
+	UserID     string
+	LegalNames string
+	Gender     contract.Gender
+	Dob        time.Time
+	Address    any
+}
+
 type VerifyParams struct {
 	UserID      string
 	VerifiedBy  string
@@ -105,6 +113,69 @@ func GetByUser(ctx context.Context, q *db.Queries, userID string) (contract.Look
 	}
 
 	return mapGetRow(row)
+}
+
+// GetByID returns the KYC record by its ID.
+func GetByID(ctx context.Context, q *db.Queries, id string) (contract.LookupKycRecord, error) {
+	if id == "" {
+		return contract.LookupKycRecord{}, errors.New("kyc id is required")
+	}
+	row, err := q.LookupKycRecordByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contract.LookupKycRecord{}, ErrKycNotFound
+		}
+		return contract.LookupKycRecord{}, err
+	}
+
+	return mapRecord(
+		row.ID,
+		*row.UserID,
+		string(row.Status),
+		row.ExpiresAt.Time,
+		row.VerifyBefore.Time,
+		row.Usable,
+		row.Ready,
+	)
+}
+
+// UpdateProfile updates the personal details on a user's KYC record.
+func UpdateProfile(ctx context.Context, q *db.Queries, p UpdateProfileParams) error {
+	if p.UserID == "" {
+		return ErrEmptyUserID
+	}
+	if p.LegalNames == "" {
+		return errors.New("legal names is required")
+	}
+
+	var addressBytes []byte
+	if p.Address != nil {
+		var err error
+		addressBytes, err = json.Marshal(p.Address)
+		if err != nil {
+			return fmt.Errorf("marshal address: %w", err)
+		}
+	}
+
+	var dbGender db.Gender
+	switch p.Gender {
+	case contract.GenderMale:
+		dbGender = db.GenderMale
+	case contract.GenderFemale:
+		dbGender = db.GenderFemale
+	case contract.GenderUndefined:
+		dbGender = db.GenderUndefined
+	default:
+		return errors.New("invalid gender")
+	}
+
+	return q.UpdateKycProfile(ctx, db.UpdateKycProfileParams{
+		UserID:     &p.UserID,
+		LegalNames: &p.LegalNames,
+		Gender:     &dbGender,
+		Dob:        pgtype.Date{Time: p.Dob, Valid: !p.Dob.IsZero()},
+		Address:    addressBytes,
+	})
 }
 
 // UpdateDocuments replaces document references and resets the record to pending.
@@ -273,6 +344,7 @@ func mapGetRow(row db.LookupKycRecordByUserRow) (contract.LookupKycRecord, error
 		row.ExpiresAt.Time,
 		row.VerifyBefore.Time,
 		row.Usable,
+		row.Ready,
 	)
 }
 
@@ -284,17 +356,18 @@ func mapListRow(row db.ListKycsRow) (contract.LookupKycRecord, error) {
 		row.ExpiresAt.Time,
 		row.VerifyBefore.Time,
 		row.Usable,
+		row.Ready,
 	)
 }
 
 func mapListByRiskRow(row db.ListKycsByRiskProfileRow) (contract.LookupKycRecord, error) {
 	return mapRecord(
-		row.ID, *row.UserID, string(row.Status), row.ExpiresAt.Time, row.VerifyBefore.Time, row.Usable,
+		row.ID, *row.UserID, string(row.Status), row.ExpiresAt.Time, row.VerifyBefore.Time, row.Usable, row.Ready,
 	)
 }
 
 func mapRecord(
-	id, userId, status string, expiresAt, verifyBefore time.Time, usable bool,
+	id, userId, status string, expiresAt, verifyBefore time.Time, usable bool, ready *bool,
 ) (contract.LookupKycRecord, error) {
 	rec := contract.LookupKycRecord{
 		ID:           id,
@@ -302,14 +375,8 @@ func mapRecord(
 		Status:       contract.KYCStatus(status),
 		ExpiresAt:    expiresAt,
 		VerifyBefore: verifyBefore,
+		Ready:        ready,
 		Usable:       usable,
 	}
 	return rec, nil
-}
-
-func formatTimestamptz(t pgtype.Timestamptz) string {
-	if !t.Valid {
-		return ""
-	}
-	return t.Time.UTC().Format(time.RFC3339)
 }

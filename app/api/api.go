@@ -80,6 +80,7 @@ func SetupControllers() error {
 func SetupMiddlewares() {
 	ioc.NamedFactory("middleware.jwt", middleware.RequireAuth)
 	ioc.NamedFactory("middleware.kyc", middleware.RequireKycVerified)
+	ioc.NamedFactory("middleware.role", middleware.RequireRole)
 }
 
 func MountGlobalMiddlewares(e *gin.Engine, origins []string) {

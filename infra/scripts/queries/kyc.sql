@@ -56,6 +56,17 @@ set
 where
     user_id = $1;
 
+-- name: UpdateKycProfile :exec
+update kyc_records
+set
+    updated_at = now(),
+    legal_names = $2,
+    gender = $3,
+    dob = $4,
+    address = $5
+where
+    user_id = $1;
+
 -- name: SetKycStatus :exec
 update kyc_records
 set
@@ -136,6 +147,26 @@ from
 where
     k.user_id = $1
     and status not in ('expired', 'rejected')
+limit
+    1;
+
+-- name: LookupKycRecordByID :one
+select
+    k.id,
+    k.user_id,
+    k.status,
+    k.ready,
+    (k.created_at + k.valid_window)::timestamptz as expires_at,
+    coalesce(
+        k.status = 'verified'
+        and now() <= (k.created_at + k.valid_window),
+        false
+    )::boolean as usable,
+    (k.created_at + verification_window)::timestamptz as verify_before
+from
+    kyc_records k
+where
+    k.id = $1
 limit
     1;
 

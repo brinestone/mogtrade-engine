@@ -13,8 +13,21 @@ type PresignUrlParams struct {
 	Window      time.Duration
 }
 
+type StorageObject struct {
+	Fingerprint string
+	Name        string
+	// Url         string
+}
+
+type FindObjectWithFingerprintParams struct {
+	Bucket      string
+	ObjectName  string
+	Fingerprint string
+}
+
 // ObjectStorage defines the interface for object storage operations.
 type ObjectStorage interface {
+	FindObjectWithFingerprint(context.Context, FindObjectWithFingerprintParams) (StorageObject, error)
 	// Upload stores data at the given path and returns a URI/URL.
 	Upload(context.Context, string, io.ReadSeeker) (string, error)
 	// Download retrieves data at the given path.
