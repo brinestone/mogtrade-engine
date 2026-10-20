@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/gin-gonic/gin"
@@ -9,7 +10,7 @@ import (
 
 type RoleMiddleware func(roles ...contract.Role) gin.HandlerFunc
 
-// RoleMiddleware creates a middleware that requires one or more roles.
+// RequireRole creates a middleware that requires one or more roles.
 func RequireRole(a contract.RoleAuthorizer) RoleMiddleware {
 	return func(roles ...contract.Role) gin.HandlerFunc {
 		return func(c *gin.Context) {
@@ -19,11 +20,23 @@ func RequireRole(a contract.RoleAuthorizer) RoleMiddleware {
 				return
 			}
 
-			if a.HasRole(c.Request.Context(), uid, roles) {
-				c.Next()
-			} else {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
+			if v, ok := c.Get("claims"); ok {
+				if claims, ok := v.(contract.BearerClaims); ok {
+					for _, role := range roles {
+						if slices.Contains(claims.Roles, string(role)) {
+							c.Next()
+							return
+						}
+					}
+				}
 			}
+
+			if a != nil && a.HasRole(c.Request.Context(), uid, roles) {
+				c.Next()
+				return
+			}
+
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
 		}
 	}
 }

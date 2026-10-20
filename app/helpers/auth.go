@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/web/middleware"
 	"github.com/gin-gonic/gin"
@@ -23,8 +24,18 @@ func GetCurrentUserIdOrDefault(c *gin.Context, def string) string {
 	}
 	return uid
 }
+
 func GetCurrentUserId(c *gin.Context) string {
 	return c.GetString("uid")
+}
+
+func GetClaims(c *gin.Context) (contract.BearerClaims, bool) {
+	v, ok := c.Get("claims")
+	if !ok {
+		return contract.BearerClaims{}, false
+	}
+	claims, ok := v.(contract.BearerClaims)
+	return claims, ok
 }
 
 func GetCurrentUser(c *gin.Context) (db.User, error) {
@@ -33,10 +44,12 @@ func GetCurrentUser(c *gin.Context) (db.User, error) {
 		return q.FindUserById(c.Request.Context(), uid)
 	})
 }
+
 func ProvideRoleMiddleware() middleware.RoleMiddleware {
 	ptr, _ := ioc.NamedGet[middleware.RoleMiddleware](context.TODO(), "middleware.role")
 	return *ptr
 }
+
 func ProvideJWTMiddleware() middleware.JWTMiddleware {
 	ptr, _ := ioc.NamedGet[middleware.JWTMiddleware](context.TODO(), "middleware.jwt")
 	return *ptr
