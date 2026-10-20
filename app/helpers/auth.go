@@ -33,6 +33,10 @@ func GetCurrentUser(c *gin.Context) (db.User, error) {
 		return q.FindUserById(c.Request.Context(), uid)
 	})
 }
+func ProvideRoleMiddleware() middleware.RoleMiddleware {
+	ptr, _ := ioc.NamedGet[middleware.RoleMiddleware](context.TODO(), "middleware.role")
+	return *ptr
+}
 func ProvideJWTMiddleware() middleware.JWTMiddleware {
 	ptr, _ := ioc.NamedGet[middleware.JWTMiddleware](context.TODO(), "middleware.jwt")
 	return *ptr

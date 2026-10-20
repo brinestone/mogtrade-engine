@@ -10,7 +10,6 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
@@ -273,6 +272,7 @@ func mapGetRow(row db.LookupKycRecordByUserRow) (contract.LookupKycRecord, error
 		row.ExpiresAt.Time,
 		row.VerifyBefore.Time,
 		row.Usable,
+		row.Ready,
 	)
 }
 
@@ -284,17 +284,18 @@ func mapListRow(row db.ListKycsRow) (contract.LookupKycRecord, error) {
 		row.ExpiresAt.Time,
 		row.VerifyBefore.Time,
 		row.Usable,
+		row.Ready,
 	)
 }
 
 func mapListByRiskRow(row db.ListKycsByRiskProfileRow) (contract.LookupKycRecord, error) {
 	return mapRecord(
-		row.ID, *row.UserID, string(row.Status), row.ExpiresAt.Time, row.VerifyBefore.Time, row.Usable,
+		row.ID, *row.UserID, string(row.Status), row.ExpiresAt.Time, row.VerifyBefore.Time, row.Usable, row.Ready,
 	)
 }
 
 func mapRecord(
-	id, userId, status string, expiresAt, verifyBefore time.Time, usable bool,
+	id, userId, status string, expiresAt, verifyBefore time.Time, usable bool, ready *bool,
 ) (contract.LookupKycRecord, error) {
 	rec := contract.LookupKycRecord{
 		ID:           id,
@@ -302,14 +303,8 @@ func mapRecord(
 		Status:       contract.KYCStatus(status),
 		ExpiresAt:    expiresAt,
 		VerifyBefore: verifyBefore,
+		Ready:        ready,
 		Usable:       usable,
 	}
 	return rec, nil
-}
-
-func formatTimestamptz(t pgtype.Timestamptz) string {
-	if !t.Valid {
-		return ""
-	}
-	return t.Time.UTC().Format(time.RFC3339)
 }

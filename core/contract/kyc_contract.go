@@ -66,6 +66,7 @@ type KYCRecord struct {
 
 type LookupKycRecord struct {
 	ID           string
+	Ready        *bool
 	UserID       string
 	Status       KYCStatus
 	ExpiresAt    time.Time

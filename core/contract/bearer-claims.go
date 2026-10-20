@@ -6,4 +6,5 @@ type BearerClaims struct {
 	Email         string    `json:"email"`
 	EmailVerified bool      `json:"email_verified"`
 	Photo         *string   `json:"photo"`
+	Roles         []string  `json:"roles,omitempty"`
 }
