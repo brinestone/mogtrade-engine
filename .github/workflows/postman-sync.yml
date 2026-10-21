@@ -10,6 +10,10 @@ concurrency:
 permissions:
   contents: read
 
+
+env:
+  POSTMAN_API_KEY: ${{secrets.POSTMAN}}
+
 jobs:
   postman-sync:
     name: Postman sync
@@ -21,5 +25,5 @@ jobs:
       - name: Push workspace
         uses: postmanlabs/postman-cli-action@v1
         with:
-          api-key: ${{ secrets.POSTMAN_API_KEY }}
+          api-key: ${{ env.POSTMAN_API_KEY }}
           command: postman workspace push --yes
