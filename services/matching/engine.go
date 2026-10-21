@@ -2,7 +2,6 @@ package matching
 
 import (
 	"container/heap"
-	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -174,29 +173,29 @@ func (e *Engine) findMatches(symbol string) {
 	}
 }
 
-func (e *Engine) StartAutoMatching(ctx context.Context) {
-	t := time.NewTicker(time.Second)
-	go func(t *time.Ticker) {
-		e.logger.Debug("starting auto matching")
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				e.booksMu.Lock()
-				symbols := make([]string, 0, len(e.books))
-				for symbol := range e.books {
-					symbols = append(symbols, symbol)
-				}
-				e.booksMu.Unlock()
+// func (e *Engine) StartAutoMatching(ctx context.Context) {
+// 	t := time.NewTicker(time.Second)
+// 	go func(t *time.Ticker) {
+// 		e.logger.Debug("starting auto matching")
+// 		for {
+// 			select {
+// 			case <-ctx.Done():
+// 				return
+// 			case <-t.C:
+// 				e.booksMu.Lock()
+// 				symbols := make([]string, 0, len(e.books))
+// 				for symbol := range e.books {
+// 					symbols = append(symbols, symbol)
+// 				}
+// 				e.booksMu.Unlock()
 
-				for _, symbol := range symbols {
-					e.findMatches(symbol)
-				}
-			}
-		}
-	}(t)
-}
+// 				for _, symbol := range symbols {
+// 					e.findMatches(symbol)
+// 				}
+// 			}
+// 		}
+// 	}(t)
+// }
 
 func NewMatchingEngine(l *slog.Logger, eb contract.EventBus) *Engine {
 	return &Engine{
