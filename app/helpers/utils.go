@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/brinestone/mogtrade/infra/db"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +14,14 @@ import (
 
 func Ptr[T any](v T) *T {
 	return &v
+}
+
+type TransactionRepoHandler func(*db.Queries) error
+
+func WithTransactionRepo(ctx context.Context, handler TransactionRepoHandler) error {
+	return WithTransaction(ctx, func(tx pgx.Tx) error {
+		return handler(db.New(tx))
+	})
 }
 
 type TransactionHandler func(pgx.Tx) error

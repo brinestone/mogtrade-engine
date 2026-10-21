@@ -85,6 +85,62 @@ func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams
 	return err
 }
 
+const findOpenOrders = `-- name: FindOpenOrders :many
+select
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
+from
+    orders
+where
+    id > $1
+    and status in ('pending', 'submitted', 'partially_filled')
+order by
+    id
+limit
+    $2
+`
+
+type FindOpenOrdersParams struct {
+	ID    string
+	Limit int32
+}
+
+func (q *Queries) FindOpenOrders(ctx context.Context, arg FindOpenOrdersParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, findOpenOrders, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Symbol,
+			&i.Side,
+			&i.OrderType,
+			&i.Quantity,
+			&i.LimitPrice,
+			&i.StopPrice,
+			&i.ID,
+			&i.ClientOrderID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TracingID,
+			&i.Fee,
+			&i.Currency,
+			&i.ExchangeRate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findOrderById = `-- name: FindOrderById :one
 select
     user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
@@ -96,6 +152,47 @@ where
 
 func (q *Queries) FindOrderById(ctx context.Context, id string) (Order, error) {
 	row := q.db.QueryRow(ctx, findOrderById, id)
+	var i Order
+	err := row.Scan(
+		&i.UserID,
+		&i.Symbol,
+		&i.Side,
+		&i.OrderType,
+		&i.Quantity,
+		&i.LimitPrice,
+		&i.StopPrice,
+		&i.ID,
+		&i.ClientOrderID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TracingID,
+		&i.Fee,
+		&i.Currency,
+		&i.ExchangeRate,
+	)
+	return i, err
+}
+
+const findOwnedOrder = `-- name: FindOwnedOrder :one
+select
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
+from
+    orders
+where
+    user_id = $1
+    and id = $2
+limit
+    1
+`
+
+type FindOwnedOrderParams struct {
+	UserID *string
+	ID     string
+}
+
+func (q *Queries) FindOwnedOrder(ctx context.Context, arg FindOwnedOrderParams) (Order, error) {
+	row := q.db.QueryRow(ctx, findOwnedOrder, arg.UserID, arg.ID)
 	var i Order
 	err := row.Scan(
 		&i.UserID,
@@ -173,6 +270,66 @@ func (q *Queries) GetOrders(ctx context.Context, arg GetOrdersParams) ([]Order, 
 	return items, nil
 }
 
+const markOrderCancelled = `-- name: MarkOrderCancelled :exec
+update orders
+set
+    status = 'cancelled',
+    updated_at = now()
+where
+    user_id = $1
+    and id = $2
+`
+
+type MarkOrderCancelledParams struct {
+	UserID *string
+	ID     string
+}
+
+func (q *Queries) MarkOrderCancelled(ctx context.Context, arg MarkOrderCancelledParams) error {
+	_, err := q.db.Exec(ctx, markOrderCancelled, arg.UserID, arg.ID)
+	return err
+}
+
+const markOrderRejected = `-- name: MarkOrderRejected :exec
+update orders
+set
+    status = 'rejected',
+    updated_at = now()
+where
+    user_id = $1
+    and id = $2
+`
+
+type MarkOrderRejectedParams struct {
+	UserID *string
+	ID     string
+}
+
+func (q *Queries) MarkOrderRejected(ctx context.Context, arg MarkOrderRejectedParams) error {
+	_, err := q.db.Exec(ctx, markOrderRejected, arg.UserID, arg.ID)
+	return err
+}
+
+const markOrderSubmitted = `-- name: MarkOrderSubmitted :exec
+update orders
+set
+    status = 'submitted',
+    updated_at = now()
+where
+    user_id = $1
+    and id = $2
+`
+
+type MarkOrderSubmittedParams struct {
+	UserID *string
+	ID     string
+}
+
+func (q *Queries) MarkOrderSubmitted(ctx context.Context, arg MarkOrderSubmittedParams) error {
+	_, err := q.db.Exec(ctx, markOrderSubmitted, arg.UserID, arg.ID)
+	return err
+}
+
 const orderExistsById = `-- name: OrderExistsById :one
 select
     exists (
@@ -203,10 +360,28 @@ INSERT INTO
         quantity,
         limit_price,
         stop_price,
-        client_order_id
+        client_order_id,
+        tracing_id,
+        fee,
+        currency,
+        exchange_rate
     )
 VALUES
-    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13
+    )
 `
 
 type PlaceOrderParams struct {
@@ -219,6 +394,10 @@ type PlaceOrderParams struct {
 	LimitPrice    decimal.NullDecimal
 	StopPrice     decimal.NullDecimal
 	ClientOrderID *string
+	TracingID     string
+	Fee           decimal.Decimal
+	Currency      string
+	ExchangeRate  decimal.Decimal
 }
 
 func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) error {
@@ -232,6 +411,10 @@ func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) error {
 		arg.LimitPrice,
 		arg.StopPrice,
 		arg.ClientOrderID,
+		arg.TracingID,
+		arg.Fee,
+		arg.Currency,
+		arg.ExchangeRate,
 	)
 	return err
 }

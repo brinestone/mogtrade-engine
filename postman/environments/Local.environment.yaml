@@ -1,0 +1,6 @@
+name: Local
+values:
+  - key: base_url
+    value: ''
+  - key: email
+    value: ''

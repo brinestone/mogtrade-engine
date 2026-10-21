@@ -135,15 +135,17 @@ func (o *OrderBook) RemoveOrder(orderId string, side db.OrderSide, price decimal
 		}
 		for e := l.Orders.Front(); e != nil; e = e.Next() {
 			entry := e.Value.(OrderEntry)
-			if entry.OrderId == orderId {
-				l.Orders.Remove(e)
-				l.TotalVolume = l.TotalVolume.Sub(entry.Quantity)
-				if l.Orders.Len() == 0 {
-					delete(o.asks, levelKey)
-					o.removeSellPriceFromHeap(price)
-				}
-				return true, entry.Quantity
+			if entry.OrderId != orderId {
+				continue
 			}
+			l.Orders.Remove(e)
+			l.TotalVolume = l.TotalVolume.Sub(entry.Quantity)
+			if l.Orders.Len() == 0 {
+				delete(o.asks, levelKey)
+				o.removeSellPriceFromHeap(price)
+			}
+			return true, entry.Quantity
+
 		}
 	} else {
 		o.buyMu.Lock()
@@ -154,15 +156,16 @@ func (o *OrderBook) RemoveOrder(orderId string, side db.OrderSide, price decimal
 		}
 		for e := l.Orders.Front(); e != nil; e = e.Next() {
 			entry := e.Value.(OrderEntry)
-			if entry.OrderId == orderId {
-				l.Orders.Remove(e)
-				l.TotalVolume = l.TotalVolume.Sub(entry.Quantity)
-				if l.Orders.Len() == 0 {
-					delete(o.bids, levelKey)
-					o.removeBuyPriceFromHeap(price)
-				}
-				return true, entry.Quantity
+			if entry.OrderId != orderId {
+				continue
 			}
+			l.Orders.Remove(e)
+			l.TotalVolume = l.TotalVolume.Sub(entry.Quantity)
+			if l.Orders.Len() == 0 {
+				delete(o.bids, levelKey)
+				o.removeBuyPriceFromHeap(price)
+			}
+			return true, entry.Quantity
 		}
 	}
 	return false, decimal.Zero

@@ -1,14 +1,9 @@
 $kind: http-request
-name: 'Get Wallet Balance'
 method: GET
-url: '{{base_url}}/api/v1/wallet/{{wallet_type}}'
+url: "{{base_url}}/api/v1/wallet/status/{{wallet_type}}"
 order: 1000
 description: |-
   Returns the current wallet snapshot for the authenticated user.
   If the wallet doesn't exist yet but the user does, it will be auto-created.
 
   **Wallet types:** `real`, `virtual`
-pathVariables:
-  - key: wallet_type
-    value: 'virtual'
-    description: 'Wallet type: real or virtual'
