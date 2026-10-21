@@ -1,10 +1,9 @@
 package matching
 
 import (
+	"log/slog"
 	"testing"
 	"time"
-
-	"log/slog"
 
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/infra/events"
@@ -12,9 +11,7 @@ import (
 )
 
 func NewTestLogger(t *testing.T) *slog.Logger {
-	// Use slog.Discard to avoid panics from nil writers.
-	logger := slog.New(slog.DiscardHandler)
-	return logger
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
@@ -22,7 +19,8 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 	eb := events.UseInMemoryEventBus()
 	eng := NewMatchingEngine(logger, eb)
 
-	// Insert a sell order at price 100.00 for quantity 5.0
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
+
 	sellOrder := PlaceMatchOrderParams{
 		OrderId:  "sell-1",
 		Symbol:   "BTCUSD",
@@ -32,7 +30,6 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 	}
 	eng.PlaceMatchOrder(sellOrder)
 
-	// Insert a buy order at price 105.00 for quantity 10.0 (should match 5.0 against sell)
 	buyOrder := PlaceMatchOrderParams{
 		OrderId:  "buy-1",
 		Symbol:   "BTCUSD",
@@ -42,31 +39,26 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 	}
 	eng.PlaceMatchOrder(buyOrder)
 
-	// Subscribe to order matched events
-	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
-	_ev := <-matches
-	ev, ok := _ev.Data.(OrderMatched)
-	if !ok {
-		t.Fail()
-		return
-	}
-	if ev.BuyOrder != "buy-1" {
-		t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
-	}
-	if ev.SellOrder != "sell-1" {
-		t.Errorf("expected SellOrder='sell-1', got '%s'", ev.SellOrder)
-	}
-	if ev.Symbol != "BTCUSD" {
-		t.Errorf("expected Symbol='BTCUSD', got '%s'", ev.Symbol)
-	}
-	// The event should have been sent within a reasonable time.
-	// If the channel is empty after a short wait, it might be buffered.
-	// We'll just check that we can receive something without blocking forever.
 	select {
-	case _ = <-matches:
-		// good
-	default:
-		t.Log("No match event received (may be buffered or no match)")
+	case _ev := <-matches:
+		ev, ok := _ev.Data.(OrderMatched)
+		if !ok {
+			t.Fatalf("expected OrderMatched event data, got %T", _ev.Data)
+		}
+		if ev.BuyOrder != "buy-1" {
+			t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
+		}
+		if ev.SellOrder != "sell-1" {
+			t.Errorf("expected SellOrder='sell-1', got '%s'", ev.SellOrder)
+		}
+		if ev.Symbol != "BTCUSD" {
+			t.Errorf("expected Symbol='BTCUSD', got '%s'", ev.Symbol)
+		}
+		if !ev.MatchQuantity.Equal(decimal.NewFromFloat(5.0)) {
+			t.Errorf("expected MatchQuantity=5.0, got '%s'", ev.MatchQuantity)
+		}
+	case <-time.After(time.Second * 10):
+		t.Fatal("timed out waiting for match event")
 	}
 }
 
@@ -75,7 +67,8 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 	eb := events.UseInMemoryEventBus()
 	eng := NewMatchingEngine(logger, eb)
 
-	// Insert a sell order at price 200.00
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
+
 	sellOrder := PlaceMatchOrderParams{
 		OrderId:  "sell-1",
 		Symbol:   "ETHUSD",
@@ -85,7 +78,6 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 	}
 	eng.PlaceMatchOrder(sellOrder)
 
-	// Insert a buy order at a lower price (no match because bid < ask)
 	buyOrder := PlaceMatchOrderParams{
 		OrderId:  "buy-1",
 		Symbol:   "ETHUSD",
@@ -95,13 +87,11 @@ func TestPlaceMatchOrder_NoMatch_DifferentSide(t *testing.T) {
 	}
 	eng.PlaceMatchOrder(buyOrder)
 
-	// No match event should be generated (or the channel may be empty)
-	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
 	select {
 	case ev := <-matches:
-		t.Logf("Received unexpected match event: %+v", ev)
+		t.Fatalf("received unexpected match event: %+v", ev)
 	case <-time.After(100 * time.Millisecond):
-		// Expected no event
+		// Expected: no event because bid (150) < ask (200)
 	}
 }
 
@@ -110,7 +100,8 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	eb := events.UseInMemoryEventBus()
 	eng := NewMatchingEngine(logger, eb)
 
-	// Sell order with qty 10.0 at price 100.0
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
+
 	sellOrder := PlaceMatchOrderParams{
 		OrderId:  "sell-1",
 		Symbol:   "SOLUSD",
@@ -120,7 +111,6 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	}
 	eng.PlaceMatchOrder(sellOrder)
 
-	// Buy order with qty 4.0 at price 105.0 (should match 4.0, leaving 6.0 on sell side)
 	buyOrder := PlaceMatchOrderParams{
 		OrderId:  "buy-1",
 		Symbol:   "SOLUSD",
@@ -130,22 +120,71 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 	}
 	eng.PlaceMatchOrder(buyOrder)
 
-	// Drain match channel
-	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
-	_ev := <-matches
-	ev := _ev.Data.(OrderMatched)
-	if ev.BuyOrder != "buy-1" {
-		t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
-	}
-	if ev.SellOrder != "sell-1" {
-		t.Errorf("expected SellOrder='sell-1', got '%s'", ev.SellOrder)
-	}
-	// After partial fill, the sell order should still have remaining qty 6.0
-	// We can't directly check the order book from here, but we can verify the event was sent.
 	select {
-	case _ = <-matches:
-		// second event (if any)
-	default:
-		// no more events
+	case _ev := <-matches:
+		ev, ok := _ev.Data.(OrderMatched)
+		if !ok {
+			t.Fatalf("expected OrderMatched, got %T", _ev.Data)
+		}
+		if ev.BuyOrder != "buy-1" {
+			t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
+		}
+		if ev.SellOrder != "sell-1" {
+			t.Errorf("expected SellOrder='sell-1', got '%s'", ev.SellOrder)
+		}
+		if !ev.MatchQuantity.Equal(decimal.NewFromFloat(4.0)) {
+			t.Errorf("expected MatchQuantity=4.0, got '%s'", ev.MatchQuantity)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for match event")
+	}
+}
+
+func TestCancelMatchOrder(t *testing.T) {
+	logger := NewTestLogger(t)
+	eb := events.UseInMemoryEventBus()
+	eng := NewMatchingEngine(logger, eb)
+
+	orderPrice := decimal.NewFromFloat(100.0)
+	orderQty := decimal.NewFromFloat(5.0)
+
+	eng.PlaceMatchOrder(PlaceMatchOrderParams{
+		OrderId:  "order-to-cancel",
+		Symbol:   "BTCUSD",
+		Type:     db.OrderSideSell,
+		Quantity: orderQty,
+		Price:    orderPrice,
+	})
+
+	// Cancel the order before any buy comes in
+	removed, remQty := eng.CancelMatchOrder("order-to-cancel", "BTCUSD", db.OrderSideSell, orderPrice)
+	if !removed {
+		t.Fatal("expected order to be successfully removed from order book")
+	}
+	if !remQty.Equal(orderQty) {
+		t.Fatalf("expected remaining quantity %s, got %s", orderQty, remQty)
+	}
+
+	// Try removing again - should return false
+	removed2, _ := eng.CancelMatchOrder("order-to-cancel", "BTCUSD", db.OrderSideSell, orderPrice)
+	if removed2 {
+		t.Fatal("expected second cancel to return false")
+	}
+
+	// Now place a crossing buy order - should NOT match since sell was cancelled
+	matches := eb.Subscribe(t.Context(), EventKeyOrderMatched)
+	eng.PlaceMatchOrder(PlaceMatchOrderParams{
+		OrderId:  "buy-2",
+		Symbol:   "BTCUSD",
+		Type:     db.OrderSideBuy,
+		Quantity: decimal.NewFromFloat(5.0),
+		Price:    decimal.NewFromFloat(105.0),
+	})
+
+	select {
+	case ev := <-matches:
+		t.Fatalf("did not expect match after cancellation, but received: %+v", ev)
+	case <-time.After(100 * time.Millisecond):
+		// Success: no match occurred
 	}
 }

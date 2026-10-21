@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"container/heap"
 	"container/list"
 	"sync"
 
@@ -14,7 +15,7 @@ func (l sellPriceList) Len() int           { return len(l) }
 func (l sellPriceList) Less(i, j int) bool { return l[i].LessThan(l[j]) }
 func (l sellPriceList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 func (l *sellPriceList) Peek() decimal.NullDecimal {
-	if l.Len() == 0 {
+	if len(*l) == 0 {
 		return decimal.NullDecimal{}
 	}
 	return decimal.NewNullDecimal((*l)[0])
@@ -37,7 +38,7 @@ func (l buyPriceList) Len() int           { return len(l) }
 func (l buyPriceList) Less(i, j int) bool { return l[i].GreaterThan(l[j]) }
 func (l buyPriceList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 func (l *buyPriceList) Peek() decimal.NullDecimal {
-	if l.Len() == 0 {
+	if len(*l) == 0 {
 		return decimal.NullDecimal{}
 	}
 	return decimal.NewNullDecimal((*l)[0])
@@ -83,94 +84,167 @@ type OrderBook struct {
 }
 
 func (o *OrderBook) AddOrder(p PlaceMatchOrderParams) {
-	var level *priceLevel
 	levelKey := p.Price.String()
 	if p.Type == db.OrderSideSell {
+		o.sellMu.Lock()
 		l, found := o.asks[levelKey]
 		if !found {
-			o.sellMu.Lock()
-			l, found = o.asks[levelKey]
-			if !found {
-				l = &priceLevel{
-					Orders:      list.New(),
-					TotalVolume: decimal.Zero,
-				}
-				o.asks[levelKey] = l
+			l = &priceLevel{
+				Orders:      list.New(),
+				TotalVolume: decimal.Zero,
 			}
-			o.sellMu.Unlock()
-			o.sellPrices.Push(p.Price)
+			o.asks[levelKey] = l
+			heap.Push(o.sellPrices, p.Price)
 		}
-		level = l
+		l.TotalVolume = l.TotalVolume.Add(p.Quantity)
+		l.Orders.PushBack(OrderEntry{
+			OrderId:  p.OrderId,
+			Side:     p.Type,
+			Quantity: p.Quantity,
+		})
+		o.sellMu.Unlock()
 	} else {
+		o.buyMu.Lock()
 		l, found := o.bids[levelKey]
 		if !found {
-			o.buyMu.Lock()
-			l, found = o.bids[levelKey]
-			if !found {
-				l = &priceLevel{
-					Orders:      list.New(),
-					TotalVolume: decimal.Zero,
-				}
-				o.bids[levelKey] = l
+			l = &priceLevel{
+				Orders:      list.New(),
+				TotalVolume: decimal.Zero,
 			}
-			o.buyMu.Unlock()
-			o.bidPrices.Push(p.Price)
+			o.bids[levelKey] = l
+			heap.Push(o.bidPrices, p.Price)
 		}
-		level = l
+		l.TotalVolume = l.TotalVolume.Add(p.Quantity)
+		l.Orders.PushBack(OrderEntry{
+			OrderId:  p.OrderId,
+			Side:     p.Type,
+			Quantity: p.Quantity,
+		})
+		o.buyMu.Unlock()
 	}
-	level.TotalVolume.Add(p.Quantity)
-	level.Orders.PushBack(OrderEntry{
-		OrderId:  p.OrderId,
-		Side:     p.Type,
-		Quantity: p.Quantity,
-	})
+}
+
+func (o *OrderBook) RemoveOrder(orderId string, side db.OrderSide, price decimal.Decimal) (bool, decimal.Decimal) {
+	levelKey := price.String()
+	if side == db.OrderSideSell {
+		o.sellMu.Lock()
+		defer o.sellMu.Unlock()
+		l, found := o.asks[levelKey]
+		if !found {
+			return false, decimal.Zero
+		}
+		for e := l.Orders.Front(); e != nil; e = e.Next() {
+			entry := e.Value.(OrderEntry)
+			if entry.OrderId == orderId {
+				l.Orders.Remove(e)
+				l.TotalVolume = l.TotalVolume.Sub(entry.Quantity)
+				if l.Orders.Len() == 0 {
+					delete(o.asks, levelKey)
+					o.removeSellPriceFromHeap(price)
+				}
+				return true, entry.Quantity
+			}
+		}
+	} else {
+		o.buyMu.Lock()
+		defer o.buyMu.Unlock()
+		l, found := o.bids[levelKey]
+		if !found {
+			return false, decimal.Zero
+		}
+		for e := l.Orders.Front(); e != nil; e = e.Next() {
+			entry := e.Value.(OrderEntry)
+			if entry.OrderId == orderId {
+				l.Orders.Remove(e)
+				l.TotalVolume = l.TotalVolume.Sub(entry.Quantity)
+				if l.Orders.Len() == 0 {
+					delete(o.bids, levelKey)
+					o.removeBuyPriceFromHeap(price)
+				}
+				return true, entry.Quantity
+			}
+		}
+	}
+	return false, decimal.Zero
+}
+
+func (o *OrderBook) removeSellPriceFromHeap(price decimal.Decimal) {
+	for i, p := range *o.sellPrices {
+		if p.Equal(price) {
+			heap.Remove(o.sellPrices, i)
+			break
+		}
+	}
+}
+
+func (o *OrderBook) removeBuyPriceFromHeap(price decimal.Decimal) {
+	for i, p := range *o.bidPrices {
+		if p.Equal(price) {
+			heap.Remove(o.bidPrices, i)
+			break
+		}
+	}
 }
 
 func (o *OrderBook) BestAsk() PriceLevel {
+	o.sellMu.Lock()
+	defer o.sellMu.Unlock()
+	return o.bestAskLocked()
+}
+
+func (o *OrderBook) bestAskLocked() PriceLevel {
 	var bestAsk = o.sellPrices.Peek()
 	result := PriceLevel{}
 
 	if bestAsk.Valid {
 		result.Valid = true
-		e := o.asks[bestAsk.Decimal.String()]
-		for n := e.Orders.Front(); n != nil; n = n.Next() {
-			entry, ok := n.Value.(OrderEntry)
-			if ok {
-				result.Orders = append(result.Orders, entry)
+		e, ok := o.asks[bestAsk.Decimal.String()]
+		if ok {
+			for n := e.Orders.Front(); n != nil; n = n.Next() {
+				entry, ok := n.Value.(OrderEntry)
+				if ok {
+					result.Orders = append(result.Orders, entry)
+				}
 			}
+			result.Price = bestAsk.Decimal
+			result.TotalVolume = e.TotalVolume
 		}
-		result.Price = bestAsk.Decimal
-		result.TotalVolume = e.TotalVolume
 	}
 	return result
 }
 
 func (o *OrderBook) BestBid() PriceLevel {
+	o.buyMu.Lock()
+	defer o.buyMu.Unlock()
+	return o.bestBidLocked()
+}
+
+func (o *OrderBook) bestBidLocked() PriceLevel {
 	var bestBid = o.bidPrices.Peek()
 	result := PriceLevel{}
 
 	if bestBid.Valid {
 		result.Valid = true
-		e := o.bids[bestBid.Decimal.String()]
-		for n := e.Orders.Front(); n != nil; n = n.Next() {
-			entry, ok := n.Value.(OrderEntry)
-			if ok {
-				result.Orders = append(result.Orders, entry)
+		e, ok := o.bids[bestBid.Decimal.String()]
+		if ok {
+			for n := e.Orders.Front(); n != nil; n = n.Next() {
+				entry, ok := n.Value.(OrderEntry)
+				if ok {
+					result.Orders = append(result.Orders, entry)
+				}
 			}
+			result.Price = bestBid.Decimal
+			result.TotalVolume = e.TotalVolume
 		}
-		result.Price = bestBid.Decimal
-		result.TotalVolume = e.TotalVolume
 	}
 	return result
 }
 
-func (o *OrderBook) findMatches() {
-
-}
-
 func NewBook() *OrderBook {
-	sellPrices := new(make(sellPriceList, 0))
-	buyPrices := new(make(buyPriceList, 0))
+	sellPrices := new(sellPriceList)
+	buyPrices := new(buyPriceList)
+	heap.Init(sellPrices)
+	heap.Init(buyPrices)
 	return &OrderBook{
 		bids:       make(map[string]*priceLevel),
 		asks:       make(map[string]*priceLevel),
