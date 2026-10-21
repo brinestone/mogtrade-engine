@@ -1,0 +1,9 @@
+# Use this workspace to collaborate
+workspace:
+  id: 9d0a162c-a81a-4c60-aaca-35d3a80d4d68
+
+localResources:
+  specs:
+    - ../smithy/mogtrade.smithy
+    - ../smithy/types.smithy
+    - ../openapi/api/openapi/Api.openapi.json

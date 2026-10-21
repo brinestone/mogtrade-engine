@@ -1,0 +1,6 @@
+$kind: http-request
+name: 'Get User Preferences'
+method: GET
+url: '{{base_url}}/api/v1/user/prefs'
+order: 1000
+description: Returns the preferences/settings for the currently authenticated user.

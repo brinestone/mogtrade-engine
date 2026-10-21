@@ -1,0 +1,12 @@
+$kind: collection
+name: Wallet
+description: |-
+  Wallet management endpoints. Each user has two wallet types:
+  - `real`: Real money wallet
+  - `virtual`: Virtual/paper trading wallet (starts with $100,000)
+order: 4000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{access_token}}'

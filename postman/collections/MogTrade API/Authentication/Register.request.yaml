@@ -1,0 +1,18 @@
+$kind: http-request
+name: Register
+method: POST
+url: '{{base_url}}/api/v1/auth/register/credential'
+order: 2000
+description: Create a new user account using email and password credentials.
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "names": "John Doe",
+      "email": "john.doe@example.com",
+      "password": "securePass123",
+      "confirmPassword": "securePass123"
+    }

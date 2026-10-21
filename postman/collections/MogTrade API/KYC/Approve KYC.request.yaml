@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'Approve KYC'
+method: PATCH
+url: '{{base_url}}/api/v1/kyc/{{kyc_user_id}}/approve'
+order: 9000
+description: |-
+  Approves a KYC application, marking the user as verified. Optionally sets a risk profile.
+  Requires `kyc_verifier`, `admin`, or `compliance` role.
+pathVariables:
+  - key: kyc_user_id
+    value: '<user-ulid>'
+    description: The ULID of the user being approved
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "riskProfile": "low"
+    }

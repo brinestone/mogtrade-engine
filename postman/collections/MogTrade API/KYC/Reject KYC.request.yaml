@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'Reject KYC'
+method: PATCH
+url: '{{base_url}}/api/v1/kyc/{{kyc_user_id}}/reject'
+order: 10000
+description: |-
+  Rejects a KYC application with a reason.
+  Requires `kyc_verifier`, `admin`, or `compliance` role.
+pathVariables:
+  - key: kyc_user_id
+    value: '<user-ulid>'
+    description: The ULID of the user being rejected
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "reason": "Document quality insufficient — please resubmit clearer images."
+    }

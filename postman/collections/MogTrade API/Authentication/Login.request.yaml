@@ -1,0 +1,32 @@
+$kind: http-request
+name: Login
+method: POST
+url: '{{base_url}}/api/v1/auth/login/credential'
+order: 3000
+description: |-
+  Sign in with email and password to obtain a JWT access token and a refresh token.
+  The `X-D-Id` header is required to identify the client device.
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-D-Id
+    value: '{{device_id}}'
+    description: Client device identifier
+body:
+  type: json
+  content: |-
+    {
+      "email": "john.doe@example.com",
+      "password": "securePass123"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const res = pm.response.json();
+      if (res.accessToken) {
+        pm.collectionVariables.set("access_token", res.accessToken);
+      }
+      if (res.refreshToken) {
+        pm.collectionVariables.set("refresh_token", res.refreshToken);
+      }

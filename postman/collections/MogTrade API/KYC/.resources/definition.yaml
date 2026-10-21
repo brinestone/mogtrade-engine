@@ -1,0 +1,12 @@
+$kind: collection
+name: KYC
+description: |-
+  Know Your Customer (KYC) verification endpoints.
+  Users must complete KYC before placing real orders.
+  Verifier/admin/compliance roles can review and approve/reject applications.
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{access_token}}'

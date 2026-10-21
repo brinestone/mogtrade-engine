@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'List Orders'
+method: GET
+url: '{{base_url}}/api/v1/orders'
+order: 1000
+description: |-
+  Returns a paginated list of orders. Uses cursor-based pagination.
+  No authentication required.
+queryParams:
+  - key: limit
+    value: '20'
+    description: Maximum number of orders to return (max 100, default 100)
+  - key: cursor
+    value: ''
+    description: Cursor for pagination (ULID of the last order from the previous page)
+    disabled: true

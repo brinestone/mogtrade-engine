@@ -1,0 +1,32 @@
+$kind: http-request
+name: 'Place Order'
+method: POST
+url: '{{base_url}}/api/v1/orders'
+order: 3000
+description: |-
+  Place a new trade order. Requires KYC verification.
+
+  **Order Types:** `market`, `limit`, `stop`, `stop_limit`
+  **Order Sides:** `buy`, `sell`
+  **Wallet Types:** `real`, `virtual`
+
+  - `limitPrice` is required for `limit` and `stop_limit` orders.
+  - `stopPrice` is required for `stop` and `stop_limit` orders.
+  - `X-Idempotency-Token` header is required to prevent duplicate orders.
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-Idempotency-Token
+    value: '{{$guid}}'
+    description: Unique idempotency token to prevent duplicate order submissions
+body:
+  type: json
+  content: |-
+    {
+      "symbol": "AAPL",
+      "currency": "USD",
+      "side": "buy",
+      "type": "market",
+      "quantity": 10,
+      "walletType": "virtual"
+    }

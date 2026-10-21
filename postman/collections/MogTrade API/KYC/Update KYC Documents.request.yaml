@@ -1,0 +1,29 @@
+$kind: http-request
+name: 'Update KYC Documents'
+method: POST
+url: '{{base_url}}/api/v1/kyc/documents'
+order: 6000
+description: |-
+  Batch-uploads KYC document fingerprints. At least one document must be provided.
+  Each document's fingerprint is verified against the object store before being saved.
+  Use the presigned upload URL endpoint first to upload the actual files to object storage.
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "front": {
+        "objectName": "kyc/<user-id>/front-20240101120000",
+        "fingerprint": "<sha256-hash>"
+      },
+      "back": {
+        "objectName": "kyc/<user-id>/back-20240101120000",
+        "fingerprint": "<sha256-hash>"
+      },
+      "selfie": {
+        "objectName": "kyc/<user-id>/selfie-20240101120000",
+        "fingerprint": "<sha256-hash>"
+      }
+    }

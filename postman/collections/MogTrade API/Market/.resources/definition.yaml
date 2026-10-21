@@ -1,0 +1,10 @@
+$kind: collection
+name: Market
+description: |-
+  Market data endpoints. The live feed uses Server-Sent Events (SSE) to stream real-time ticker data.
+order: 5000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{access_token}}'
