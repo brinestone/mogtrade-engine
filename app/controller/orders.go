@@ -3,8 +3,10 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -17,13 +19,17 @@ import (
 	eventpayloads "github.com/brinestone/mogtrade/web/payloads/events"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
-	"go-slim.dev/ioc"
 )
 
 const (
 	EventKeyOrderCreatedV1 string = "order.created.v1"
+)
+
+var (
+	ErrOrderRejected error = errors.New("order has been rejected")
 )
 
 type Orders struct {
@@ -37,90 +43,95 @@ type Orders struct {
 	cc             contract.CurrencyConverter
 }
 
+func (o *Orders) bootstrapMatchingEngine(ctx context.Context) {
+	o.logger.Info("loading open orders into matching engine")
+
+	var cursor string = "00000000000000000000000000"
+	const batchSize = 1000
+	var batches = 0
+	var added = 0
+	for {
+		batch, err := o.repo.FindOpenOrders(ctx, db.FindOpenOrdersParams{
+			ID:    cursor,
+			Limit: batchSize,
+		})
+		if err != nil {
+			o.logger.Error("could not fetchc batch of orders", "cursor", cursor, "batchSize", batchSize)
+			return
+		}
+
+		if len(batch) == 0 {
+			break
+		}
+
+		cursor = batch[len(batch)-1].ID
+		for _, order := range batch {
+			o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
+				OrderId:  order.ID,
+				Symbol:   order.Symbol,
+				Type:     order.Side,
+				Quantity: order.Quantity,
+				Price:    order.LimitPrice.Decimal,
+			})
+			added++
+		}
+		batches++
+	}
+	o.logger.Info("orders added to matching engine", "added", added, "batches", batches)
+}
+
 func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
+	orderId, tracingId := o.idGenerator(), o.idGenerator()
+	logger := o.logger.With("user", helpers.GetCurrentUserId(ctx), "orderId", orderId, "tracingId", tracingId)
 	var payload httppayloads.PlaceOrderPayload
 
 	o.logger.Info("handling request to place orders, validating request")
 	if err := ctx.ShouldBind(&payload); err != nil {
-		o.logger.Warn("form binding validation failed, aborting")
+		logger.Warn("form binding validation failed, aborting")
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := ctx.ShouldBindHeader(&payload); err != nil {
-		o.logger.Warn("header binding validation failed, aborting")
+		logger.Warn("header binding validation failed, aborting")
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	errMsgs := payload.Validate()
 	if len(errMsgs) > 0 {
-		o.logger.Warn("order request failed validation. Aborting request")
+		logger.Warn("order request failed validation. Aborting request")
 		ctx.JSON(http.StatusBadRequest, gin.H{"errors": errMsgs})
 		return
 	}
-	o.logger.Info("request validated successfully, opening database transaction")
 
-	tx, err := o.pool.Begin(ctx.Request.Context())
-	if err != nil {
-		o.logger.Error("could not begin database transaction", "err", err.Error())
-		helpers.InternalServerError(ctx)
-		return
-	}
-	defer tx.Rollback(ctx.Request.Context())
-
-	o.logger.Info("transaction opened, getting user wallet info", "wallet-type", payload.WalletType)
-	q := o.repo.WithTx(tx)
-	wallet, err := billing.GetCurrentWalletSnapshot(ctx.Request.Context(), q, billing.GetWalletSnapshotParams{
-		Type:    payload.WalletType,
-		OwnerId: helpers.GetCurrentUserId(ctx),
-	})
-	if err != nil {
-		if errors.Is(err, billing.ErrWalletNotFound) {
-			o.logger.Warn("wallet not found", "uid", helpers.GetCurrentUserId(ctx), "wallet-type", payload.WalletType)
-			ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-			return
-		}
-		o.logger.Error("could not retrieve wallet info", "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx), "err", err.Error())
-		helpers.InternalServerError(ctx)
-		return
-	}
-	o.logger.Info("wallet info retrieval successful, performing risk checks")
-	result := o.riskEngine.ValidateOrder(ctx.Request.Context(), orders.OrderContext{
-		Symbol:         payload.Symbol,
-		Side:           payload.Side,
-		OrderType:      payload.Type,
-		Quantity:       decimal.NewFromFloat32(payload.Quantity),
-		LimitPrice:     payload.LimitPrice,
-		StopPrice:      payload.StopPrice,
-		AccountBalance: wallet.CurrentBalance,
-	})
-	if !result.Approved {
-		o.logger.Warn("risk check failed, aborting", "reason", result.Reason, "wallet-id", wallet.WalletID, "wallet-type", payload.WalletType, "uid", helpers.GetCurrentUserId(ctx))
-		ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": result.Reason})
-		return
-	}
-
-	o.logger.Info("risk checks passed, creating order")
-	orderId := o.idGenerator()
-	tracingId := o.idGenerator()
-	systemWalletId := helpers.GetSystemWalletByType(wallet.WalletType)
-	_, err = ioc.Invoke(ctx.Request.Context(), func(cc contract.CurrencyConverter, e contract.TickerInfoProvider) error {
-		rate, err := cc.GetDefaultExchangeRates(ctx, payload.Currency)
+	err := helpers.WithTransactionRepo(ctx.Request.Context(), func(q *db.Queries) error {
+		logger.Debug("getting wallet snapshot", "type", payload.WalletType)
+		wallet, err := billing.GetCurrentWalletSnapshot(ctx.Request.Context(), q, billing.GetWalletSnapshotParams{
+			Type:    payload.WalletType,
+			OwnerId: helpers.GetCurrentUserId(ctx),
+		})
 		if err != nil {
 			return err
 		}
-		exchangeRate := decimal.NewFromFloat32(1 / rate[0])
+		systemWallet := helpers.GetSystemWalletByType(wallet.WalletType)
+		logger.Debug("getting exchange rates", "currency", payload.Currency)
+		rate, err := o.cc.GetDefaultExchangeRates(ctx.Request.Context(), payload.Currency)
+		if err != nil {
+			return err
+		}
+		exchangerate := decimal.NewFromFloat32(1 / rate[0])
+		logger.Debug("creating order record")
 		err = orders.PlaceOrder(ctx.Request.Context(), q, orders.PlaceOrderParams{
 			TracingId:            tracingId,
 			OrderId:              orderId,
 			WalletId:             wallet.WalletID,
 			WalletTransactionId:  o.idGenerator(),
-			SystemWalletId:       systemWalletId,
-			IdempotencyToken:     payload.IdempotencyToken,
+			SystemWalletId:       systemWallet,
 			PlacedBy:             helpers.GetCurrentUserId(ctx),
 			Currency:             payload.Currency,
-			ExchangeRateSnapshot: exchangeRate,
+			ExchangeRateSnapshot: exchangerate,
 			Symbol:               payload.Symbol,
+			IdempotencyToken:     payload.IdempotencyToken,
 			Side:                 db.OrderSide(payload.Side),
 			Type:                 db.OrderType(payload.Type),
 			Quantity:             decimal.NewFromFloat32(payload.Quantity),
@@ -131,44 +142,87 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			return err
 		}
 
+		result := o.riskEngine.ValidateOrder(ctx.Copy().Request.Context(), orders.OrderContext{
+			Symbol:         payload.Symbol,
+			Side:           payload.Side,
+			OrderType:      payload.Type,
+			Quantity:       decimal.NewFromFloat32(payload.Quantity),
+			LimitPrice:     payload.LimitPrice,
+			StopPrice:      payload.StopPrice,
+			AccountBalance: wallet.CurrentBalance,
+		})
+		if !result.Approved {
+			err = orders.RejectOrder(ctx.Request.Context(), q, orders.RejectOrderParams{
+				OrderId: orderId,
+				OwnerId: helpers.GetCurrentUserId(ctx),
+			})
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: risk checks failed due to reason: %s", ErrOrderRejected, result.Reason)
+		} else {
+			err = orders.SubmitOrder(ctx.Request.Context(), q, orders.SubmitOrderParams{
+				OrderId: orderId,
+				OwnerId: helpers.GetCurrentUserId(ctx),
+			})
+			if err != nil {
+				return err
+			}
+		}
+
 		err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
 			Id:               o.idGenerator(),
 			Src:              &wallet.WalletID,
-			Dest:             &systemWalletId,
+			Dest:             &systemWallet,
 			Intent:           "order placed",
-			ExtraData:        map[string]any{},
 			IdempotencyToken: payload.IdempotencyToken,
 			DoneBy:           helpers.GetCurrentUserId(ctx),
 			TracingId:        tracingId,
 			Currency:         payload.Currency,
-			ExchangeRate:     exchangeRate,
+			ExchangeRate:     exchangerate,
 			Value:            decimal.NewFromFloat32(payload.Quantity).Mul(payload.LimitPrice.Decimal),
 		})
 		if err != nil {
 			return err
 		}
-
-		go o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
-			OrderId:  orderId,
-			Symbol:   payload.Symbol,
-			Type:     db.OrderSide(payload.Side),
-			Quantity: decimal.NewFromFloat32(payload.Quantity),
-			Price:    payload.LimitPrice.Decimal,
-		})
 		return nil
 	})
 
 	if err != nil {
-		if errors.Is(err, orders.ErrDuplicateOrder) {
+		unprocessableErrors := []error{
+			billing.ErrWalletNotFound,
+			orders.ErrUnsupportedOrderType,
+			orders.ErrOrderNotFound,
+			orders.ErrInvalidOrderTransition,
+		}
+		passableErrors := []error{
+			billing.ErrDuplicateIdempotencyKey,
+			orders.ErrDuplicateOrder,
+		}
+		if slices.ContainsFunc(passableErrors, func(e error) bool {
+			return errors.Is(err, e)
+		}) {
 			ctx.Status(http.StatusAccepted)
 			return
 		}
-		o.logger.Error("could not create order", "err", err.Error())
+
+		if slices.ContainsFunc(unprocessableErrors, func(e error) bool { return errors.Is(err, e) }) {
+			o.logger.Warn("could not process placing order", "err", err.Error())
+			ctx.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		o.logger.Error("could not place order", "err", err.Error())
 		helpers.InternalServerError(ctx)
 		return
 	}
-	tx.Commit(ctx.Request.Context())
 
+	go o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
+		OrderId:  orderId,
+		Symbol:   payload.Symbol,
+		Type:     db.OrderSide(payload.Side),
+		Quantity: decimal.NewFromFloat32(payload.Quantity),
+		Price:    payload.LimitPrice.Decimal,
+	})
 	ctx.Status(http.StatusAccepted)
 	o.eb.Publish(EventKeyOrderCreatedV1, eventpayloads.OrderPlaced{
 		OrderId:   orderId,
@@ -201,6 +255,36 @@ func (o *Orders) handleFindOrders(ctx *gin.Context) {
 		"nextCursor": nextCursor,
 	})
 }
+
+func (o *Orders) handleCancelOrder(c *gin.Context) {
+	userId := helpers.GetCurrentUserId(c)
+	orderId := c.Param("order")
+
+	order, err := helpers.WithValueTransaction(c.Request.Context(), func(tx pgx.Tx) (db.Order, error) {
+		repo := o.repo.WithTx(tx)
+		return orders.CancelOrder(c.Request.Context(), repo, orders.CancelOrderParams{
+			OwnerId: userId,
+			OrderId: orderId,
+		})
+	})
+	if err != nil {
+		if errors.Is(err, orders.ErrOrderNotFound) {
+			o.logger.Warn("order not found", "orderId", orderId, "uid", userId)
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		} else if errors.Is(err, orders.ErrInvalidOrderTransition) {
+			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		o.logger.Error("could not cancel order", "err", err.Error(), "uid", userId, "orderId", orderId)
+		helpers.InternalServerError(c)
+		return
+	}
+
+	o.matchingEngine.CancelMatchOrder(orderId, order.Symbol, order.Side, order.LimitPrice.Decimal)
+	c.Status(http.StatusAccepted)
+}
+
 func (c *Orders) MountV1(r *gin.RouterGroup) {
 	jwtMiddleware := helpers.ProvideJWTMiddleware()
 	kycMiddleware := helpers.ProvideKYCMiddleware()
@@ -210,8 +294,12 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 	public.GET("", c.handleFindOrders)
 
 	secured := router.Group("", jwtMiddleware())
-	secured.POST("", kycMiddleware(contract.KYCVerified), c.handlePlaceOrder)
+	secured.POST("", kycMiddleware(contract.KYCPending), c.handlePlaceOrder)
+
+	mutations := secured.Group("/:order")
+	mutations.DELETE("", c.handleCancelOrder)
 	c.subscribeToEventsV1()
+	go c.bootstrapMatchingEngine(context.TODO())
 }
 
 func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract.Event) {

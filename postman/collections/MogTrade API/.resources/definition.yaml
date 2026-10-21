@@ -1,5 +1,4 @@
 $kind: collection
-name: MogTrade API
 description: |-
   REST API collection for the MogTrade Engine — a trading platform that lets users place trade orders on connected stock market exchanges.
 
@@ -15,15 +14,7 @@ description: |-
   - `X-Refresh-Token`: Refresh token (required for token rotation)
   - `X-Idempotency-Token`: Idempotency key (required for placing orders)
 variables:
-  - key: base_url
-    value: 'http://localhost:8080'
-    description: Base URL of the MogTrade API server
-  - key: access_token
-    value: ''
-    description: JWT access token obtained after login
-  - key: refresh_token
-    value: ''
-    description: Refresh token obtained after login
-  - key: device_id
-    value: 'postman-device-001'
-    description: Client device identifier
+  base_url: http://localhost:8080
+  access_token: ""
+  refresh_token: ""
+  device_id: postman-device-001
