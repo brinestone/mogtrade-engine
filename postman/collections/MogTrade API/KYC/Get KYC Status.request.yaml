@@ -1,0 +1,6 @@
+$kind: http-request
+name: 'Get KYC Status'
+method: GET
+url: '{{base_url}}/api/v1/kyc'
+order: 1000
+description: Returns the KYC status for the authenticated user, including the list of pending actions.

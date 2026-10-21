@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'List KYC Applications'
+method: GET
+url: '{{base_url}}/api/v1/kyc/applications'
+order: 7000
+description: |-
+  Lists all KYC applications. Optionally filters by risk profile.
+  Requires `kyc_verifier`, `admin`, or `compliance` role.
+queryParams:
+  - key: risk_profile
+    value: ''
+    description: 'Optional risk profile filter. Allowed values: low, medium, high'
+    disabled: true

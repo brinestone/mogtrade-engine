@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'Update KYC Profile'
+method: POST
+url: '{{base_url}}/api/v1/kyc/profile'
+order: 4000
+description: Updates the KYC profile for the authenticated user with personal details required for verification.
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "legalNames": "John Michael Doe",
+      "gender": "male",
+      "dob": "1990-01-15",
+      "address": {
+        "street": "123 Main St",
+        "city": "New York",
+        "state": "NY",
+        "country": "US",
+        "postalCode": "10001"
+      }
+    }

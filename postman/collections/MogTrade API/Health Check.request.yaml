@@ -1,0 +1,6 @@
+$kind: http-request
+name: 'Health Check'
+method: GET
+url: '{{base_url}}/api/v1/healthz'
+order: 1000
+description: Returns the health status of the API server. No authentication required.

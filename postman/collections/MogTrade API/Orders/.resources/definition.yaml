@@ -1,0 +1,11 @@
+$kind: collection
+name: Orders
+description: |-
+  Trade order endpoints. Placing orders requires KYC verification.
+  Supports market, limit, stop, and stop-limit order types for both buy and sell sides.
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{access_token}}'

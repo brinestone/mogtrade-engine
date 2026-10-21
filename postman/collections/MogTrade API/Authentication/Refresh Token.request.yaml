@@ -1,0 +1,26 @@
+$kind: http-request
+name: 'Refresh Token'
+method: GET
+url: '{{base_url}}/api/v1/auth/refresh'
+order: 4000
+description: |-
+  Rotate the access token using a valid refresh token.
+  Requires `X-Refresh-Token` and `X-d-Id` headers.
+headers:
+  - key: X-Refresh-Token
+    value: '{{refresh_token}}'
+    description: The refresh token from a previous login or refresh
+  - key: X-d-Id
+    value: '{{device_id}}'
+    description: The device identifier
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const res = pm.response.json();
+      if (res.accessToken) {
+        pm.collectionVariables.set("access_token", res.accessToken);
+      }
+      if (res.refreshToken) {
+        pm.collectionVariables.set("refresh_token", res.refreshToken);
+      }

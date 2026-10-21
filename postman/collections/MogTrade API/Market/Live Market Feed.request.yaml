@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'Live Market Feed'
+method: GET
+url: '{{base_url}}/api/v1/market/feed'
+order: 1000
+description: |-
+  Connects to the live market data feed via Server-Sent Events (SSE).
+  Streams real-time ticker events as `text/event-stream`.
+
+  Each event is named `ticker` and contains a JSON payload with market data.
+  The connection stays open until the client disconnects.
+headers:
+  - key: Accept
+    value: text/event-stream
+  - key: Cache-Control
+    value: no-cache

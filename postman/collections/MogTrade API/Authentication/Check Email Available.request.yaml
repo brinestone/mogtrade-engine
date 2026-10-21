@@ -1,0 +1,10 @@
+$kind: http-request
+name: 'Check Email Available'
+method: GET
+url: '{{base_url}}/api/v1/auth/email-available'
+order: 1000
+description: Check whether an email address is available for a new account registration.
+queryParams:
+  - key: email
+    value: 'user@example.com'
+    description: The email address to check

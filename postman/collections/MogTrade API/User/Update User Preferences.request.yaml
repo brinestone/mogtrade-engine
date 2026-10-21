@@ -1,0 +1,22 @@
+$kind: http-request
+name: 'Update User Preferences'
+method: PUT
+url: '{{base_url}}/api/v1/user/prefs'
+order: 2000
+description: |-
+  Creates or updates the preferences for the currently authenticated user.
+  The request body is a free-form JSON object — any key-value pairs are accepted.
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "theme": "dark",
+      "currency": "USD",
+      "notifications": {
+        "email": true,
+        "push": false
+      }
+    }

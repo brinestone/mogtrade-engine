@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Begin KYC Verification'
+method: POST
+url: '{{base_url}}/api/v1/kyc/verify'
+order: 8000
+description: |-
+  Marks a KYC application as 'verifying' (admin review in progress).
+  Requires `kyc_verifier`, `admin`, or `compliance` role.
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "userId": "<user-ulid>"
+    }

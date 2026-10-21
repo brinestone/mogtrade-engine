@@ -1,0 +1,10 @@
+$kind: http-request
+name: 'Get Order'
+method: GET
+url: '{{base_url}}/api/v1/orders/{{order_id}}'
+order: 2000
+description: Retrieve a single order by its ULID.
+pathVariables:
+  - key: order_id
+    value: '<order-ulid>'
+    description: The ULID of the order to retrieve

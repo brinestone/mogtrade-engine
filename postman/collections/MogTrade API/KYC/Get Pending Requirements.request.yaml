@@ -1,0 +1,6 @@
+$kind: http-request
+name: 'Get Pending Requirements'
+method: GET
+url: '{{base_url}}/api/v1/kyc/pending'
+order: 3000
+description: Returns the list of pending KYC requirements for the authenticated user.

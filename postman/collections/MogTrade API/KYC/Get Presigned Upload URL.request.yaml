@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'Get Presigned Upload URL'
+method: GET
+url: '{{base_url}}/api/v1/kyc/presigned-upload'
+order: 5000
+description: |-
+  Generates one or more presigned PUT URLs for uploading KYC documents directly to object storage.
+  Allowed document types: `front`, `back`, `selfie`, `proof_of_address`.
+  Multiple types can be requested as a comma-separated list.
+queryParams:
+  - key: types
+    value: 'front,back,selfie'
+    description: 'Comma-separated list of document types. Allowed: front, back, selfie, proof_of_address'

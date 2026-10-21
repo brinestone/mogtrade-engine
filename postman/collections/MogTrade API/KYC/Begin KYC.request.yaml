@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Begin KYC'
+method: POST
+url: '{{base_url}}/api/v1/kyc'
+order: 2000
+description: |-
+  Opens a new KYC verification flow for the authenticated user.
+  Returns `102 Processing` if a KYC record already exists.
