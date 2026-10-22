@@ -4,11 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/getsentry/sentry-go"
-	sgin "github.com/getsentry/sentry-go/gin"
 	"github.com/go-playground/validator/v10"
 
 	"github.com/brinestone/mogtrade/core/contract"
@@ -94,21 +91,7 @@ func MountGlobalMiddlewares(e *gin.Engine, origins []string) {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-	dsn := os.Getenv("SENTRY_DSN")
-	if len(dsn) > 0 {
-		if err := sentry.Init(sentry.ClientOptions{
-			Dsn:              dsn,
-			Environment:      "development",
-			EnableTracing:    true,
-			TracesSampleRate: .5,
-			Debug:            true,
-		}); err != nil {
-			panic(err)
-		}
-		e.Use(sgin.New(sgin.Options{Repanic: true}))
-	}
 }
-
 func RegisterCustomValidators() {
 	validators := validators.NewRequestValidator()
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
