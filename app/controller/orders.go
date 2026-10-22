@@ -77,7 +77,7 @@ func (o *Orders) bootstrapMatchingEngine(ctx context.Context) {
 		}
 		batches++
 	}
-	o.logger.Info("orders added to matching engine", "added", added, "batches", batches)
+	o.logger.Info("orders added to matching engine", "added", added, "batches", batches, "batchSize", batchSize)
 }
 
 func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
