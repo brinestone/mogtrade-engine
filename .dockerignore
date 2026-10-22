@@ -1,0 +1,66 @@
+# Docker ignore file for MogTrade Web API
+
+
+# Binary output from build (handled by multi-stage build)
+*.mod
+*.sum
+
+# Logs and temporary files
+logs/
+tmp/
+
+
+# Version control
+.git/
+.gitignore
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker specific
+.dockerignore
+
+# Makefile and other build tools
+Makefile
+
+# Cache files
+.cache/
+
+# Environment files (typically not committed to repo)
+.env
+.env.example
+
+# Build artifacts from previous builds
+*.binary
+*.exe
+
+# Documentation (can be large, served separately if needed)
+docs/
+scripts/
+build/
+
+# Go.sum backup
+go.sum.bak
+
+sqlc.yaml
+smithy*
+skills*
+README.md
+Makefile
+GEMINI.md
+CONTRIBUTING.md
+build_specs.go
+Agents.md
+.vfox*
+*mcp*
+scripts
+postman
+openapi
+.unipi
+.postman
+.pi
+.agents
+.github

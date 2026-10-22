@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra"
 	"github.com/brinestone/mogtrade/infra/adapter"
@@ -211,48 +210,53 @@ func registerBackgroundJobs(ctx context.Context) error {
 
 func setupLogging(ctx context.Context) error {
 	var logger *slog.Logger
-	if os.Getenv("LOGGING") != "enable" {
-		logger = slog.Default()
-	} else {
-		gin.DisableConsoleColor()
-		err := os.MkdirAll("logs", 0755) // Changed to MkdirAll for Windows safety
-		if err != nil && !errors.Is(err, os.ErrExist) {
-			return err
-		}
-		accessHandle, err := os.OpenFile(filepath.Join("logs", "access.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		errHandler, err := os.OpenFile(filepath.Join("logs", "errors.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		// Open app log handle safely here
-		appLogsHandle, err := os.OpenFile(filepath.Join("logs", "app.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		// Clean up all hooks at once when context drops
-		go func() {
-			defer accessHandle.Close()
-			defer errHandler.Close()
-			defer appLogsHandle.Close()
-			<-ctx.Done()
-		}()
-
-		gin.DefaultWriter = io.MultiWriter(accessHandle, os.Stdout)
-		gin.DefaultErrorWriter = io.MultiWriter(errHandler, os.Stderr)
-
-		// Build the slog logger inside the setup function
-		logger = slog.New(slog.NewMultiHandler(
-			slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
-			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
-			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
-			// slog.NewJSONHandler(errHandler, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
-		))
+	gin.DisableConsoleColor()
+	err := os.MkdirAll("logs", 0755) // Changed to MkdirAll for Windows safety
+	if err != nil && !errors.Is(err, os.ErrExist) {
+		return err
 	}
+	accessHandle, err := os.OpenFile(filepath.Join("logs", "access.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	errHandler, err := os.OpenFile(filepath.Join("logs", "errors.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	// Open app log handle safely here
+	appLogsHandle, err := os.OpenFile(filepath.Join("logs", "app.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	// Clean up all hooks at once when context drops
+	go func() {
+		defer accessHandle.Close()
+		defer errHandler.Close()
+		defer appLogsHandle.Close()
+		<-ctx.Done()
+	}()
 
-	logger = logger.With("app", "mogtrade")
+	gin.DefaultWriter = io.MultiWriter(accessHandle, os.Stdout)
+	gin.DefaultErrorWriter = io.MultiWriter(errHandler, os.Stderr)
+
+	var handlers []slog.Handler
+
+	if gin.Mode() == gin.ReleaseMode {
+		handlers = append(handlers, slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: slog.LevelInfo, ReplaceAttr: logTimeFormatter}))
+	} else {
+		handlers = append(handlers, slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
+			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
+		)
+	}
+	// Build the slog logger inside the setup function
+	logger = slog.New(slog.NewMultiHandler(handlers...))
+
+	environment := "production"
+	if gin.Mode() == gin.DebugMode {
+		environment = "development"
+	}
+	logger = logger.With("app", "mogtrade", "env", environment)
 
 	// Register it to the DI container right here
 	if err := ioc.Factory(func() *slog.Logger {
@@ -307,4 +311,3 @@ func startAsyncTasks(ctx context.Context) {
 	startJobScheduler(ctx)
 	go pullMarketFeed(ctx)
 }
-
