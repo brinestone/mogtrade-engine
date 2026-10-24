@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"net/http"
 
 	"github.com/brinestone/mogtrade/infra/db"
@@ -12,14 +14,29 @@ import (
 	"go-slim.dev/ioc"
 )
 
+func HashThese(args ...string) string {
+	cipher := sha1.New()
+	for _, arg := range args {
+		cipher.Write([]byte(arg))
+	}
+	return hex.EncodeToString(cipher.Sum([]byte{}))
+}
+
 func Ptr[T any](v T) *T {
 	return &v
 }
 
 type TransactionRepoHandler func(*db.Queries) error
+type ValueTransactionRepoHandler[T any] func(*db.Queries) (T, error)
 
 func WithTransactionRepo(ctx context.Context, handler TransactionRepoHandler) error {
 	return WithTransaction(ctx, func(tx pgx.Tx) error {
+		return handler(db.New(tx))
+	})
+}
+
+func WithValueTransactionRepo[T any](ctx context.Context, handler ValueTransactionRepoHandler[T]) (T, error) {
+	return WithValueTransaction(ctx, func(tx pgx.Tx) (T, error) {
 		return handler(db.New(tx))
 	})
 }

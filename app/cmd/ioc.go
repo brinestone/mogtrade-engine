@@ -242,11 +242,11 @@ func setupLogging(ctx context.Context) error {
 	var handlers []slog.Handler
 
 	if gin.Mode() == gin.ReleaseMode {
-		handlers = append(handlers, slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: slog.LevelInfo, ReplaceAttr: logTimeFormatter}))
+		handlers = append(handlers, slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{AddSource: os.Getenv("GIN_MODE") == "release", Level: slog.LevelInfo, ReplaceAttr: logTimeFormatter}))
 	} else {
-		handlers = append(handlers, slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
-			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
-			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
+		handlers = append(handlers, slog.NewJSONHandler(appLogsHandle, &slog.HandlerOptions{AddSource: os.Getenv("GIN_MODE") == "release", Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: logTimeFormatter}),
+			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError, ReplaceAttr: logTimeFormatter}),
 		)
 	}
 	// Build the slog logger inside the setup function

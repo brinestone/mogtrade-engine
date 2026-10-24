@@ -7,6 +7,7 @@ This plan defines how MogTrade integrates external payment processors (Stripe, P
 ## 1. Core Distinction: Payment vs. Wallet Transactions
 
 ### 1.1 Payment Transactions (External)
+
 - **Origin**: External payment processor (Stripe, Paystack, Flutterwave, Adyen)
 - **Purpose**: Receive funds from customers, process payouts to users, handle refunds/disputes
 - **Lifecycle**: Initiated by customer → processed by provider → webhook-verified → settled
@@ -15,6 +16,7 @@ This plan defines how MogTrade integrates external payment processors (Stripe, P
 - **Examples**: Customer depositing money, user withdrawing funds, refund after dispute
 
 ### 1.2 Wallet Transactions (Internal)
+
 - **Origin**: MogTrade's internal ledger
 - **Purpose**: Track wallet balance changes, record deposits/withdrawals, maintain audit trail
 - **Lifecycle**: Created when payment succeeds → links to payment record → updates wallet snapshot
@@ -23,7 +25,9 @@ This plan defines how MogTrade integrates external payment processors (Stripe, P
 - **Examples**: Depositing received funds into user wallet, withdrawing funds out of user wallet, adjusting balance on dispute
 
 ### 1.3 The Interaction Point
+
 The only interaction occurs when:
+
 1. A **Payment Transaction** succeeds (webhook verified)
 2. A **Wallet Transaction** is created to credit the user's wallet
 3. The `wallet_transaction_id` on the `payments` table links back
@@ -158,6 +162,7 @@ DROP TYPE IF EXISTS payment_direction;
 ```
 
 **Rationale**:
+
 - `wallet_transaction_id` is **nullable** (FK optional) because withdrawals may not yet have a wallet transaction record, and historical payments won't have one.
 - `NUMERIC(18,4)` matches every other money column in the schema.
 - `provider TEXT` (not enum) keeps the DB layer agnostic; migration can add enum later.
@@ -174,42 +179,31 @@ The existing `wallet_transactions` table and `RecordWalletTransaction`/`UpdateWa
 ```mermaid
 flowchart TD
     %% Client Side
-    Client -->|POST /api/v1/payments/deposits {amount, currency}| Controller
-    
+    Client -->|"POST /api/v1/payments/deposits {amount, currency}"| Controller 
     %% Controller Phase
-    Controller -->|Generate ULID, idempotency token| DB[(payments table)]
-    DB -->|Insert row (status=pending)| Controller
-    Controller -->|Call contract.DepositProcessor.InitializeDeposit| Provider[External Provider]
-    Provider -->|Return authorizationUrl + reference| Controller
-    Controller -->|Return {authorizationUrl, reference}| Client
-    
+    Controller -->|"Generate ULID, idempotency token"| DB[(payments table)]
+    DB -->|"Insert row (status=pending)"| Controller
+    Controller -->|"Call contract.DepositProcessor.InitializeDeposit"| Provider[External Provider]
+    Provider -->|"Return authorizationUrl + reference"| Controller
+    Controller -->|"Return {authorizationUrl, reference}"| Client 
     %% User Side
-    Client -->|User completes payment on provider page| Provider
-    Provider -->|Payment processed| Provider
-    
+    Client -->|"User completes payment on provider page"| Provider
+    Provider -->|"Payment processed"| Provider 
     %% Webhook Phase
-    Provider -->|POST /api/v1/payments/webhooks/{provider} (raw body)| Webhook Handler
-    Webhook Handler -->|Verify signature (HMAC)| Webhook Handler
-    Webhook Handler -->|Look up payment (provider, provider_ref)| DB
-    DB -->|Ignore if already succeeded (idempotent)| Webhook Handler
-    
+    Provider -->|"POST /api/v1/payments/webhooks/{provider} (raw body)"| WebhookHandler[Webhook Handler]
+    WebhookHandler -->|"Verify signature (HMAC)"| WebhookHandler
+    WebhookHandler -->|"Look up payment (provider, provider_ref)"| DB
+    DB -->|"Ignore if already succeeded (idempotent)"| WebhookHandler 
     %% Success Path
-    Webhook Handler -->|In one DB transaction:
-        UPDATE payments SET status='succeeded' WHERE id = $1
-        RecordWalletTransaction(deposit) -- Src: systemWallet, Dest: userWallet, Intent: "deposit"
-        UPDATEWalletTransactionStatus created→processing→completed
-        Publish payment.deposit.completed.v1 on EventBus
-    |--> Webhook Handler
-    
+    WebhookHandler -->|"In one DB transaction:<br/>UPDATE payments SET status='succeeded' WHERE id = $1<br/>RecordWalletTransaction(deposit)<br/>UPDATEWalletTransactionStatus created to completed<br/>Publish payment.deposit.completed.v1 on EventBus"| WebhookHandler 
     %% Failure Path
-    Webhook Handler -->|On failure: UPDATE payments SET status='failed'| Webhook Handler
-    Webhook Handler -->|Optional: RecordWalletTransaction with Intent: "deposit reversal"| Webhook Handler
-    
+    WebhookHandler -->|"On failure: UPDATE payments SET status='failed'"| WebhookHandler
+    WebhookHandler -->|"Optional: RecordWalletTransaction with Intent: 'deposit reversal'"| WebhookHandler 
     %% Client Polling (optional)
-    Client -->|GET /api/v1/payments/deposits/{id}| Controller
-    Controller -->|Call VerifyDeposit (only if still pending)| Provider
-    Provider -->|Return current status| Controller
-    Controller -->|Return status in JSON| Client
+    Client -->|"GET /api/v1/payments/deposits/{id}"| Controller
+    Controller -->|"Call VerifyDeposit (only if still pending)"| Provider
+    Provider -->|"Return current status"| Controller
+    Controller -->|"Return status in JSON"| Client
 ```
 
 ### 4.2 Withdrawal Flow
@@ -217,41 +211,31 @@ flowchart TD
 ```mermaid
 flowchart TD
     %% Service Phase
-    Service -->|Validate balance| DB[(wallet + payments)]
-    DB -->|Debit wallet (created→processing→completed)| WalletLedger[wallet_transactions]
-    DB -->|Create payment (dir=payout, status=pending)| Payments[payments table]
-    DB -->|Call PayoutProcessor.CreatePayout| Provider[External Provider]
-    Provider -->|Return provider reference| Service
+    Service -->|"Validate balance"| DB[(wallet + payments)]
+    DB -->|"Debit wallet (created→processing→completed)"| WalletLedger[wallet_transactions]
+    DB -->|"Create payment (dir=payout, status=pending)"| Payments[payments table]
+    DB -->|"Call PayoutProcessor.CreatePayout"| Provider[External Provider]
+    Provider -->|"Return provider reference"| Service
     
     %% Webhook Phase
-    Provider -->|POST /api/v1/payments/webhooks/{provider} (raw body)| Webhook Handler
-    Webhook Handler -->|Verify signature| Webhook Handler
-    Webhook Handler -->|Look up payment (provider, provider_ref)| DB
-    DB -->|If succeeded:
-        UPDATE payments SET status='succeeded'
-        UPDATEWalletTransactionStatus processing→failed (or completed)
-    |--> Webhook Handler
+    Provider -->|"POST /api/v1/payments/webhooks/{provider} (raw body)"| WebhookHandler[Webhook Handler]
+    WebhookHandler -->|"Verify signature"| WebhookHandler
+    WebhookHandler -->|"Look up payment (provider, provider_ref)"| DB
+    DB -->|"If succeeded:<br/>UPDATE payments SET status='succeeded'<br/>UPDATEWalletTransactionStatus processing→completed"| WebhookHandler
     
     %% Refund on Failure
-    Webhook Handler -->|If failed:
-        UPDATEWalletTransactionStatus processing→failed
-        UPDATE payments SET status='failed'
-        Do NOT post reversal entry (wallet_snapshots excludes failed)
-    |--> Webhook Handler
+    WebhookHandler -->|"If failed:<br/>UPDATEWalletTransactionStatus processing→failed<br/>UPDATE payments SET status='failed'<br/>Do NOT post reversal entry"| WebhookHandler
 ```
 
 ### 4.3 Refund Flow (Payout Failure)
 
 ```mermaid
 flowchart TD
-    Webhook -->|VerifyPayout returns failed| Service
-    Service -->|In same DB tx:
-        UPDATEWalletTransactionStatus processing→failed
-        UPDATE payments SET status='failed'
-    |--> Service
-    Service -->|Do NOT post second reversal entry| Service
-    Service -->|wallet_snapshots view excludes failed transactions| Service
-    Service -->|Publish payment.payout.failed.v1 on EventBus| Service
+    Webhook -->|"VerifyPayout returns failed"| Service
+    Service -->|"In same DB tx:<br/>UPDATEWalletTransactionStatus processing→failed<br>UPDATE payments SET status='failed'"| Service
+    Service -->|"Do NOT post second reversal entry"| Service
+    Service -->|"wallet_snapshots view excludes failed transactions"| Service
+    Service -->|"Publish payment.payout.failed.v1 on EventBus"| Service
 ```
 
 ## 5. IOC Wiring (app module)
@@ -267,7 +251,7 @@ ioc.Factory(func(logger *slog.Logger, cfg PaymentConfig) contract.PayoutProcesso
 ## 5. Error Handling & Reliability
 
 | Failure Mode | Automatic Handling | Manual Admin Action |
-|---|---|---|
+| --- | --- | --- |
 | **Provider API down** | Deposits stay `pending`; retry job (`VerifyDeposit`) reconciles stale entries | Admin monitors provider status; may switch fallback provider |
 | **Duplicate webhooks** | Unique `(provider, provider_ref)` + status guard → idempotent processing | None needed |
 | **Signature failure** | 400 response; log via `slog`; never 500 (avoids provider retry storms) | Admin rotates webhook secret if compromised |
@@ -277,7 +261,7 @@ ioc.Factory(func(logger *slog.Logger, cfg PaymentConfig) contract.PayoutProcesso
 ## 6. Phased Implementation
 
 | Phase | Scope |
-|-------|-------|
+| ------- | ------- |
 | 1 | Redesign `core/contract/payment.go` (types + interfaces above) — no behavior change |
 | 2 | Migrations + sqlc queries for `payments` table (names and DDL as specified) |
 | 3 | `services/billing/deposit.go` + `services/billing/withdrawal.go` business logic |
@@ -291,7 +275,7 @@ ioc.Factory(func(logger *slog.Logger, cfg PaymentConfig) contract.PayoutProcesso
 ## 7. Risks & Mitigations
 
 | Risk | Mitigation |
-|------|------------|
+| ------ | ------------ |
 | **Contract leaks provider details** | Review rule: `core/contract` must compile with zero provider imports; returning `AuthorizationURL` AND `ClientSecret` optional fields covers both Stripe and Paystack patterns without naming providers |
 | **Webhook before user redirect completes** | Webhook is authoritative; status endpoint reconciles |
 | **Double-crediting wallet** | Unique idempotency token + unique provider ref + DB transaction around credit |
@@ -303,11 +287,13 @@ ioc.Factory(func(logger *slog.Logger, cfg PaymentConfig) contract.PayoutProcesso
 ## 7. Appendices
 
 ### Appendix A: Provider-Specific Webhook Header Mapping
+
 - **Stripe**: header `Stripe-Signature` → parse `t=...,v1=...,v0=...`; verify with `endpointSecret` and 10-min timestamp tolerance.
 - **Paystack**: header `x-paystack-signature` → HMAC-SHA512 of raw body using the secret key; no timestamp (replay not an issue but also no tolerance).
 - **Flutterwave**: header `Flutterwave-Signature` → HMAC-SHA256 of raw body using the secret key.
 
 ### Appendix B: Reconciliation Job (pseudo-code)
+
 ```go
 rows, _ := db.Queries.GetStalePayments(ctx, time.Now().Add(-48*time.Hour))
 for _, p := range rows {
@@ -324,6 +310,7 @@ for _, p := range rows {
 ```
 
 ### Appendix C: Glossary
+
 - **ULID**: Universally Unique Lexicographically Sortable Identifier — project standard for IDs.
 - **decimal.Decimal**: Go type from `shopspring/decimal` — project standard for Money; never `float64`.
 - **Idempotency Token**: client-supplied string guaranteeing retry-safe API calls; maps to `wallet_transactions.idempotency_token` DB column.
@@ -332,7 +319,7 @@ for _, p := range rows {
 ### Appendix C: Interaction Summary Table
 
 | Scenario | Payment Transaction Created | Wallet Transaction Created | Link |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Deposit succeeds** | Yes (status→succeeded) | Yes (Src: systemWallet, Dest: userWallet, Intent: "deposit") | `wallet_transaction_id` FK on payments |
 | **Withdrawal succeeds** | Yes (status→succeeded) | Yes (debit wallet, Status: processing→completed) | `wallet_transaction_id` FK on payments |
 | **Deposit fails** | Yes (status→failed) | No (or reversal entry, but wallet_snapshots excludes failed) | FK nullable; optional reversal |

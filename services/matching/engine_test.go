@@ -41,7 +41,7 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 
 	select {
 	case _ev := <-matches:
-		ev, ok := _ev.Data.(OrderMatched)
+		ev, ok := _ev.Data.(OrderMatchedEventArgs)
 		if !ok {
 			t.Fatalf("expected OrderMatched event data, got %T", _ev.Data)
 		}
@@ -122,7 +122,7 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 
 	select {
 	case _ev := <-matches:
-		ev, ok := _ev.Data.(OrderMatched)
+		ev, ok := _ev.Data.(OrderMatchedEventArgs)
 		if !ok {
 			t.Fatalf("expected OrderMatched, got %T", _ev.Data)
 		}

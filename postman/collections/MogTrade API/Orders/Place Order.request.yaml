@@ -29,8 +29,8 @@ body:
       "symbol": "BTCUSD",
       "currency": "USD",
       "type": "limit",
-      "side": "buy",
-      "quantity": 1,
-      "limitPrice": 50000,
+      "side": "sell",
+      "quantity": 0.5,
+      "limitPrice": 2000,
       "walletType": "virtual"
     }
