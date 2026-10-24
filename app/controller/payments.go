@@ -29,21 +29,14 @@ func (p *Payments) handleInitializeDeposit(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// paymentIntent, err := p.depositProcessor.InitializeDeposit(c.Request.Context(), mesomb.)
+	// 	if err != nil {
+	// 		p.logger.Error("failed to initialize deposit", "err", err.Error(), "user_id", helpers.GetCurrentUserId(c))
+	// 		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
+	// 		return
+	// 	}
 
-	paymentIntent, err := p.depositProcessor.InitializeDeposit(context.Background(), contract.InitializeDepositParams{
-		Amount:           req.Amount,
-		Currency:         req.Currency,
-		ClientID:         helpers.GetCurrentUserId(c),
-		IdempotencyToken: req.IdempotencyToken,
-		Metadata:         req.Metadata,
-	})
-	if err != nil {
-		p.logger.Error("failed to initialize deposit", "err", err.Error(), "user_id", helpers.GetCurrentUserId(c))
-		c.AbortWithStatusJSON(http.StatusInternalServerError, httppayloads.ErrInternalServerErrorPayload)
-		return
-	}
-
-	c.JSON(http.StatusOK, httppayloads.ToPaymentIntentPayload(paymentIntent))
+	// c.JSON(http.StatusOK, httppayloads.ToPaymentIntentPayload(paymentIntent))
 }
 
 func (p *Payments) handleDepositStatus(c *gin.Context) {

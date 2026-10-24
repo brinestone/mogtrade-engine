@@ -23,60 +23,60 @@ const (
 
 // Payment represents a payment transaction linked to a wallet transaction
 type Payment struct {
-	ID               string
+	ID                  string
 	WalletTransactionID *string
-	Amount           decimal.Decimal
-	Currency         string
-	PaymentMethod    string
-	Status           PaymentStatus
-	Intent           string
-	ExternalID       string
-	Notes            string
-	CreatedAt        string
-	UpdatedAt        string
+	Amount              decimal.Decimal
+	Currency            string
+	PaymentMethod       string
+	Status              PaymentStatus
+	Intent              string
+	ExternalID          string
+	Notes               string
+	CreatedAt           string
+	UpdatedAt           string
 }
 
 // PaymentService implements the contract.DepositProcessor interface
 type PaymentService struct {
-	repo           *db.Queries
-	logger         *slog.Logger
+	repo   *db.Queries
+	logger *slog.Logger
 }
 
 // NewPaymentService creates a new PaymentService
 func NewPaymentService(repo *db.Queries, logger *slog.Logger) *PaymentService {
 	return &PaymentService{
-		repo: repo,
+		repo:   repo,
 		logger: logger,
 	}
 }
 
 // InitializeDeposit creates a provider payment for deposit and returns a payment intent
 func (s *PaymentService) InitializeDeposit(ctx context.Context, p contract.InitializeDepositParams) (contract.PaymentIntent, error) {
-	s.logger.Info("initializing deposit",
-		"amount", p.Amount,
-		"currency", p.Currency,
-		"client_id", p.ClientID,
-		"payment_method", "internal")
+	// s.logger.Info("initializing deposit",
+	// 	"amount", p.Amount,
+	// 	"currency", p.Currency,
+	// 	"client_id", p.ClientID,
+	// 	"payment_method", "internal")
 
 	paymentIntent := contract.PaymentIntent{
-		ID:               generatePaymentULID(),
-		ProviderRef:      "", // Will be set by the provider
-		Provider:         "internal",
-		Amount:           p.Amount,
-		Currency:         p.Currency,
-		Status:           contract.PaymentStatusPending,
-		AuthorizationURL: "", // Internal payments don't need hosted checkout
-		ClientSecret:     "",
-		Metadata:         p.Metadata,
+		// ID:               generatePaymentULID(),
+		// ProviderRef:      "", // Will be set by the provider
+		// Provider:         "internal",
+		// Amount:           p.Amount,
+		// Currency:         p.Currency,
+		// Status:           contract.PaymentStatusPending,
+		// AuthorizationURL: "", // Internal payments don't need hosted checkout
+		// ClientSecret:     "",
+		// Metadata:         p.Metadata,
 	}
 
 	// For internal payments, we create a payment record linked to a wallet transaction
 	// The wallet transaction would need to exist first or be created as part of this process
 
-	s.logger.Info("deposit initialized",
-		"payment_id", paymentIntent.ID,
-		"amount", p.Amount,
-		"currency", p.Currency)
+	// s.logger.Info("deposit initialized",
+	// 	"payment_id", paymentIntent.ID,
+	// 	"amount", p.Amount,
+	// 	"currency", p.Currency)
 
 	return paymentIntent, nil
 }
@@ -89,10 +89,10 @@ func (s *PaymentService) VerifyDeposit(ctx context.Context, providerRef string) 
 	// For internal payments, we just return the payment as pending
 	// In a real implementation, this would query the provider
 	return contract.PaymentIntent{
-		ID:        "",
+		ID:          "",
 		ProviderRef: providerRef,
-		Provider:  "internal",
-		Status:    contract.PaymentStatusPending,
+		Provider:    "internal",
+		Status:      contract.PaymentStatusPending,
 	}, nil
 }
 
@@ -126,9 +126,9 @@ func (s *PaymentService) VerifyPayout(ctx context.Context, providerRef string) (
 
 	// For now, return pending status
 	return contract.PayoutResult{
-		ID:        "",
+		ID:          "",
 		ProviderRef: providerRef,
-		Status:    contract.PaymentStatusPending,
+		Status:      contract.PaymentStatusPending,
 	}, nil
 }
 
@@ -154,10 +154,10 @@ func (s *PaymentService) GetPayment(id string) (*Payment, error) {
 	// In a full implementation, this would query the database
 	// For now, return a placeholder
 	return &Payment{
-		ID:        id,
-		Currency:  "",
+		ID:            id,
+		Currency:      "",
 		PaymentMethod: "internal",
-		Status:    PaymentStatusProcessed,
+		Status:        PaymentStatusProcessed,
 	}, nil
 }
 

@@ -2,20 +2,21 @@ package contract
 
 import (
 	context "context"
+
 	"github.com/shopspring/decimal"
 )
 
 // PaymentIntent represents a provider-side payment the user must complete.
 type PaymentIntent struct {
-	ID            string                  // our internal payment id (ULID)
-	ProviderRef   string                  // provider's reference/access code
-	Provider      string                  // "paystack" | "stripe" | ...
-	Amount        decimal.Decimal         // Money type; never float64
-	Currency      string
-	Status        PaymentStatus           // pending | succeeded | failed | cancelled
-	AuthorizationURL string                // hosted checkout URL (optional by provider)
-	ClientSecret  string                  // for Stripe-style client confirmation (optional)
-	Metadata      map[string]any
+	ID               string          // our internal payment id (ULID)
+	ProviderRef      string          // provider's reference/access code
+	Provider         string          // "paystack" | "stripe" | ...
+	Amount           decimal.Decimal // Money type; never float64
+	Currency         string
+	Status           PaymentStatus // pending | succeeded | failed | cancelled
+	AuthorizationURL string        // hosted checkout URL (optional by provider)
+	ClientSecret     string        // for Stripe-style client confirmation (optional)
+	Metadata         map[string]any
 }
 
 // PaymentStatus represents the lifecycle state of a payment.
@@ -38,13 +39,7 @@ type DepositProcessor interface {
 }
 
 // InitializeDepositParams contains the inputs for creating a deposit payment.
-type InitializeDepositParams struct {
-	Amount          decimal.Decimal
-	Currency        string
-	ClientID        string          // our user ID / ULID
-	IdempotencyToken string        // ensures retry-safe provider request
-	Metadata        map[string]any  // e.g. order reference, user prefs
-}
+type InitializeDepositParams any
 
 // PayoutProcessor sends money out (withdrawals). Split from deposits so
 // providers that only support one direction still satisfy the contract.
@@ -57,20 +52,20 @@ type PayoutProcessor interface {
 
 // CreatePayoutParams contains the inputs for creating a payout.
 type CreatePayoutParams struct {
-	Amount          decimal.Decimal
-	Currency        string
-	ClientID        string          // our ULID / user reference
-	RecipientInfo   string          // bank account details, mobile money number, card token
-	IdempotencyToken string        // ensures retry-safe provider request
-	Metadata        map[string]any
+	Amount           decimal.Decimal
+	Currency         string
+	ClientID         string // our ULID / user reference
+	RecipientInfo    string // bank account details, mobile money number, card token
+	IdempotencyToken string // ensures retry-safe provider request
+	Metadata         map[string]any
 }
 
 // PayoutResult represents the outcome of a payout attempt.
 type PayoutResult struct {
-	ID            string
-	ProviderRef   string
-	Status        PaymentStatus
-	Metadata      map[string]any
+	ID          string
+	ProviderRef string
+	Status      PaymentStatus
+	Metadata    map[string]any
 }
 
 // WebhookHandler validates and normalizes provider webhook payloads.
@@ -83,9 +78,9 @@ type WebhookHandler interface {
 
 // PaymentEvent is the normalized internal representation of a provider webhook event.
 type PaymentEvent struct {
-	Type        string                 // e.g. "payment.succeeded", "payment.failed", "payout.pending"
-	PaymentID   string                 // our internal payment ULID
-	ProviderRef string                 // provider's reference for the event
+	Type        string // e.g. "payment.succeeded", "payment.failed", "payout.pending"
+	PaymentID   string // our internal payment ULID
+	ProviderRef string // provider's reference for the event
 	Amount      decimal.Decimal
 	Currency    string
 	Status      PaymentStatus

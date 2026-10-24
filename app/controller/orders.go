@@ -299,7 +299,8 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 	mutations := secured.Group("/:order")
 	mutations.DELETE("", c.handleCancelOrder)
 	c.subscribeToEventsV1()
-	go c.bootstrapMatchingEngine(context.TODO())
+	ctx := context.TODO()
+	go c.bootstrapMatchingEngine(ctx)
 }
 
 func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract.Event) {
@@ -311,65 +312,81 @@ func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract
 			if !ok {
 				continue
 			}
-			event, ok := ev.Data.(matching.OrderMatched)
+			event, ok := ev.Data.(matching.OrderMatchedEventArgs)
 			if !ok {
 				c.logger.Warn("invalid event data", "event", matching.EventKeyOrderMatched)
 				continue
 			}
 
 			c.logger.Info("order match found, creating execution", "buy", event.BuyOrder, "sell", event.SellOrder)
-			tx, err := c.pool.Begin(ctx)
+			type executionPairs struct {
+				buyExecution  string
+				sellExecution string
+			}
+			pair, err := helpers.WithValueTransactionRepo(ctx, func(q *db.Queries) (executionPairs, error) {
+				pair := executionPairs{
+					buyExecution:  c.idGenerator(),
+					sellExecution: c.idGenerator(),
+				}
+				buyOrder, err := q.FindOrderById(ctx, event.BuyOrder)
+				if err != nil {
+					return pair, err
+				}
+
+				sellOrder, err := q.FindOrderById(ctx, event.SellOrder)
+				if err != nil {
+					return pair, err
+				}
+
+				tracingId := c.idGenerator()
+				idempotencyToken := helpers.HashThese(*buyOrder.ClientOrderID, *sellOrder.ClientOrderID)
+				err = orders.CreateExecution(ctx, q, orders.CreateExecutionParams{
+					OrderId:          event.BuyOrder,
+					Id:               pair.buyExecution,
+					TracingId:        tracingId,
+					Quantity:         event.MatchQuantity,
+					FeeCurrency:      buyOrder.Currency,
+					FeeRate:          buyOrder.ExchangeRate,
+					FeeAmount:        buyOrder.Fee,
+					Price:            buyOrder.LimitPrice.Decimal,
+					IdempotencyToken: idempotencyToken,
+				})
+				if err != nil {
+					return pair, err
+				}
+
+				err = orders.CreateExecution(ctx, q, orders.CreateExecutionParams{
+					OrderId:          event.SellOrder,
+					Id:               pair.sellExecution,
+					TracingId:        tracingId,
+					Quantity:         event.MatchQuantity,
+					IdempotencyToken: idempotencyToken,
+					FeeCurrency:      sellOrder.Currency,
+					FeeRate:          sellOrder.ExchangeRate,
+					FeeAmount:        sellOrder.Fee,
+					Price:            sellOrder.LimitPrice.Decimal,
+				})
+
+				return pair, err
+			})
 			if err != nil {
-				c.logger.Error("could not open database transaction", "err", err.Error())
+				if errors.Is(err, orders.ErrDuplicateExecutionFound) {
+					c.logger.Warn("duplicate order execution found", "sell", event.SellOrder, "buy", event.BuyOrder, "qty", event.MatchQuantity)
+					return
+				}
+				c.logger.Error("could not create execution", "err", err.Error(), "sell", event.SellOrder, "buy", event.BuyOrder, "qty", event.MatchQuantity)
 				return
 			}
 
-			buyOrder, err := c.repo.FindOrderById(ctx, event.BuyOrder)
-			if err != nil {
-				c.logger.Error("could not find buy order", "err", err.Error(), "buy-order", event.BuyOrder, "sell-order", event.SellOrder)
-				tx.Rollback(ctx)
-				continue
-			}
-			sellOrder, err := c.repo.FindOrderById(ctx, event.SellOrder)
-			if err != nil {
-				c.logger.Error("could not find sell order", "err", err.Error(), "sell-order", event.SellOrder, "buy-order", event.BuyOrder)
-				tx.Rollback(ctx)
-				continue
-			}
-
-			tracingId := c.idGenerator()
-			err = orders.CreateExecution(ctx, c.repo.WithTx(tx), orders.CreateExecutionParams{
-				OrderId:     event.BuyOrder,
-				Id:          c.idGenerator(),
-				TracingId:   tracingId,
-				Quantity:    buyOrder.Quantity,
-				FeeCurrency: buyOrder.Currency,
-				FeeRate:     buyOrder.ExchangeRate,
-				FeeAmount:   buyOrder.Fee,
-				Price:       buyOrder.LimitPrice.Decimal,
+			c.eb.Publish(matching.EventKeyExecutionCreated, matching.ExecutionCreatedEventArgs{
+				ExecutionId: pair.buyExecution,
+				MatchedAt:   event.MatchedAt,
 			})
-			if err != nil {
-				c.logger.Error("could not create buy execution", "err", err.Error())
-				tx.Rollback(ctx)
-				continue
-			}
 
-			err = orders.CreateExecution(ctx, c.repo.WithTx(tx), orders.CreateExecutionParams{
-				OrderId:     event.SellOrder,
-				Id:          c.idGenerator(),
-				FeeCurrency: sellOrder.Currency,
-				TracingId:   tracingId,
-				FeeRate:     sellOrder.ExchangeRate,
-				FeeAmount:   sellOrder.Fee,
-				Price:       sellOrder.LimitPrice.Decimal,
-				Quantity:    sellOrder.Quantity,
+			c.eb.Publish(matching.EventKeyExecutionCreated, matching.ExecutionCreatedEventArgs{
+				ExecutionId: pair.sellExecution,
+				MatchedAt:   event.MatchedAt,
 			})
-			if err != nil {
-				c.logger.Error("could not create sell execution", "order", sellOrder.ID, "err", err.Error())
-				tx.Rollback(ctx)
-				continue
-			}
-			tx.Commit(ctx)
 		}
 	}
 }
