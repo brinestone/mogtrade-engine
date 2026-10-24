@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	EventKeyOrderMatched string = "orders.match"
+	EventKeyOrderMatched     string = "orders.match"
+	EventKeyExecutionCreated string = "execution.create"
 )
 
 type Engine struct {
@@ -30,13 +31,18 @@ type PlaceMatchOrderParams struct {
 	Price    decimal.Decimal
 }
 
-type OrderMatched struct {
+type OrderMatchedEventArgs struct {
 	BuyOrder          string
 	SellOrder         string
 	Symbol            string
 	MatchedAt         time.Time
 	MatchQuantity     decimal.Decimal
 	RemainingQuantity decimal.Decimal
+}
+
+type ExecutionCreatedEventArgs struct {
+	ExecutionId string
+	MatchedAt   time.Time
 }
 
 func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
@@ -144,7 +150,7 @@ func (e *Engine) findMatches(symbol string) {
 		askNode.Value = askEntry
 
 		// Emit match event
-		e.bus.Publish(EventKeyOrderMatched, OrderMatched{
+		e.bus.Publish(EventKeyOrderMatched, OrderMatchedEventArgs{
 			BuyOrder:          bidEntry.OrderId,
 			SellOrder:         askEntry.OrderId,
 			Symbol:            symbol,
@@ -172,30 +178,6 @@ func (e *Engine) findMatches(symbol string) {
 		}
 	}
 }
-
-// func (e *Engine) StartAutoMatching(ctx context.Context) {
-// 	t := time.NewTicker(time.Second)
-// 	go func(t *time.Ticker) {
-// 		e.logger.Debug("starting auto matching")
-// 		for {
-// 			select {
-// 			case <-ctx.Done():
-// 				return
-// 			case <-t.C:
-// 				e.booksMu.Lock()
-// 				symbols := make([]string, 0, len(e.books))
-// 				for symbol := range e.books {
-// 					symbols = append(symbols, symbol)
-// 				}
-// 				e.booksMu.Unlock()
-
-// 				for _, symbol := range symbols {
-// 					e.findMatches(symbol)
-// 				}
-// 			}
-// 		}
-// 	}(t)
-// }
 
 func NewMatchingEngine(l *slog.Logger, eb contract.EventBus) *Engine {
 	return &Engine{

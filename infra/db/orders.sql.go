@@ -20,14 +20,15 @@ insert into
         quantity,
         order_side,
         order_status,
-        "order_type",
+        order_type,
         symbol,
         "user",
         fee_currency,
         fee_rate,
         fee_amount,
+        exec_status,
         tracing_id,
-        exec_status
+        idempotency_token
     )
 values
     (
@@ -44,25 +45,27 @@ values
         $11,
         $12,
         $13,
-        $14
+        $14,
+        $15
     )
 `
 
 type CreateExecutionParams struct {
-	ID          string
-	Order       string
-	Price       decimal.Decimal
-	Quantity    decimal.Decimal
-	OrderSide   OrderSide
-	OrderStatus OrderStatus
-	OrderType   OrderType
-	Symbol      string
-	User        *string
-	FeeCurrency string
-	FeeRate     decimal.Decimal
-	FeeAmount   decimal.Decimal
-	TracingID   string
-	ExecStatus  ExecutionStatus
+	ID               string
+	Order            string
+	Price            decimal.Decimal
+	Quantity         decimal.Decimal
+	OrderSide        OrderSide
+	OrderStatus      OrderStatus
+	OrderType        OrderType
+	Symbol           string
+	User             *string
+	FeeCurrency      string
+	FeeRate          decimal.Decimal
+	FeeAmount        decimal.Decimal
+	ExecStatus       ExecutionStatus
+	TracingID        string
+	IdempotencyToken string
 }
 
 func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams) error {
@@ -79,8 +82,9 @@ func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams
 		arg.FeeCurrency,
 		arg.FeeRate,
 		arg.FeeAmount,
-		arg.TracingID,
 		arg.ExecStatus,
+		arg.TracingID,
+		arg.IdempotencyToken,
 	)
 	return err
 }
