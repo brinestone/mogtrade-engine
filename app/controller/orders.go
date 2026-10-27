@@ -141,7 +141,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			return err
 		}
 
-		result := o.riskEngine.ValidateOrder(ctx.Copy().Request.Context(), orders.OrderContext{
+		result := o.riskEngine.ValidateOrder(ctx, orders.OrderContext{
 			Symbol:         payload.Symbol,
 			Side:           payload.Side,
 			OrderType:      payload.Type,
@@ -169,27 +169,42 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			}
 		}
 
-		txId := o.idGenerator()
-		err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
-			Id:               txId,
-			Src:              &wallet.WalletID,
-			Dest:             &systemWallet,
-			Intent:           "order placed",
-			IdempotencyToken: payload.IdempotencyToken,
-			DoneBy:           helpers.GetCurrentUserId(ctx),
-			TracingId:        tracingId,
-			Currency:         payload.Currency,
-			ExchangeRate:     exchangeRates[0],
-			Value:            decimal.NewFromFloat32(payload.Quantity).Mul(payload.LimitPrice.Decimal),
-		})
-		if err != nil {
-			return err
-		}
+		if payload.Side == string(db.OrderSideBuy) {
+			txId := o.idGenerator()
+			err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
+				Id:               txId,
+				Src:              &wallet.WalletID,
+				Dest:             &systemWallet,
+				Intent:           "order placed",
+				IdempotencyToken: payload.IdempotencyToken,
+				DoneBy:           helpers.GetCurrentUserId(ctx),
+				TracingId:        tracingId,
+				Currency:         payload.Currency,
+				ExchangeRate:     exchangeRates[0],
+				Value:            decimal.NewFromFloat32(payload.Quantity).Mul(payload.LimitPrice.Decimal).Mul(exchangeRates[0]),
+			})
+			if err != nil {
+				return err
+			}
 
-		err = billing.UpdateWalletTransactionStatus(ctx, q, billing.UpdateTransactionStatusParams{
-			TransactionId: txId,
-			Status:        db.TransactionStatusCompleted,
-		})
+			err = q.AttachBidTransactionToOrder(ctx, db.AttachBidTransactionToOrderParams{
+				BidTransaction: &txId,
+				ID:             orderId,
+			})
+			if err != nil {
+				return err
+			}
+
+			err = billing.UpdateWalletTransactionStatus(ctx, q, billing.UpdateTransactionStatusParams{
+				TransactionId: txId,
+				Status:        db.TransactionStatusCompleted,
+			})
+		} else if payload.Side == string(db.OrderSideSell) {
+			err = q.AttachAskWallettoOrder(ctx, db.AttachAskWallettoOrderParams{
+				AskWallet: &wallet.WalletID,
+				ID:        orderId,
+			})
+		}
 		return err
 	})
 
@@ -252,7 +267,7 @@ func (o *Orders) handleFindOrders(ctx *gin.Context) {
 	}
 
 	var nextCursor string
-	if len(orders) > 0 {
+	if len(orders) > 0 && orders[len(orders)-1].ID != cursor && cursor != "" {
 		nextCursor = orders[len(orders)-1].ID
 	}
 	ctx.JSON(http.StatusOK, gin.H{

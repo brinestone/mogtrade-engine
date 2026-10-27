@@ -66,6 +66,8 @@ func (w *Wallets) handleGetBalance(c *gin.Context) {
 						helpers.InternalServerError(c)
 						return
 					}
+					c.JSON(http.StatusOK, httppayloads.WalletSnapshotPayload(snapshot))
+					return
 				}
 			}
 			w.logger.Warn("user wallet not found", "uid", helpers.GetCurrentUserId(c), "type", req.Type)
@@ -133,7 +135,7 @@ func (w *Wallets) createUserWallets(c *gin.Context) error {
 		TracingId:        w.idGenerator(),
 		Currency:         "USD", // TODO: Get from user prefs
 		ExchangeRate:     exr[0],
-		Value:            w.vStartingBalance,
+		Value:            w.vStartingBalance.Mul(exr[0]),
 		Src:              nil,
 	})
 	if err != nil {
