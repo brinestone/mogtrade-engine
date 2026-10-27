@@ -15,7 +15,7 @@ body:
   type: json
   content: |-
     {
-      "email": "{{email}}",
+      "email": "jane@example.com",
       "password": "{{vault:password}}"
     }
 scripts:

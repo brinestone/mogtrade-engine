@@ -191,7 +191,7 @@ func CreateExecution(ctx context.Context, q *db.Queries, p CreateExecutionParams
 	})
 	if err != nil {
 		return exec, err
-	} else if !exists {
+	} else if exists {
 		return exec, ErrDuplicateExecutionFound
 	}
 	bid, err := q.FindOrderById(ctx, p.Bid)

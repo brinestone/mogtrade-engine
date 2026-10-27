@@ -11,6 +11,44 @@ import (
 	decimal "github.com/shopspring/decimal"
 )
 
+const attachAskWallettoOrder = `-- name: AttachAskWallettoOrder :exec
+update orders
+set
+    updated_at = now(),
+    ask_wallet = $1
+where
+    id = $2
+`
+
+type AttachAskWallettoOrderParams struct {
+	AskWallet *string
+	ID        string
+}
+
+func (q *Queries) AttachAskWallettoOrder(ctx context.Context, arg AttachAskWallettoOrderParams) error {
+	_, err := q.db.Exec(ctx, attachAskWallettoOrder, arg.AskWallet, arg.ID)
+	return err
+}
+
+const attachBidTransactionToOrder = `-- name: AttachBidTransactionToOrder :exec
+update orders
+set
+    updated_at = now(),
+    bid_transaction = $1
+where
+    id = $2
+`
+
+type AttachBidTransactionToOrderParams struct {
+	BidTransaction *string
+	ID             string
+}
+
+func (q *Queries) AttachBidTransactionToOrder(ctx context.Context, arg AttachBidTransactionToOrderParams) error {
+	_, err := q.db.Exec(ctx, attachBidTransactionToOrder, arg.BidTransaction, arg.ID)
+	return err
+}
+
 const createExecution = `-- name: CreateExecution :one
 INSERT INTO
     "executions" (

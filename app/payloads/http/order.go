@@ -9,6 +9,7 @@ import (
 
 type OrderPayload struct {
 	Id         string              `json:"id"`
+	Currency   string              `json:"currency"`
 	Symbol     string              `json:"symbol"`
 	Side       string              `json:"side"`
 	Type       string              `json:"type"`
@@ -24,6 +25,7 @@ func mapOrderToDto(o db.Order) OrderPayload {
 	return OrderPayload{
 		Id:         o.ID,
 		Symbol:     o.Symbol,
+		Currency:   o.Currency,
 		Side:       string(o.Side),
 		Type:       string(o.OrderType),
 		Quantity:   o.Quantity,

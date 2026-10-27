@@ -32,7 +32,7 @@ func GetDefaultExchangeRateDecimalFor(ctx context.Context, curr ...string) ([]de
 		}
 
 		for _, r := range _rates {
-			rates = append(rates, decimal.NewFromFloat32(r))
+			rates = append(rates, decimal.NewFromInt(1).Div(decimal.NewFromFloat32(r)))
 		}
 
 		return rates, nil

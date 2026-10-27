@@ -1,3 +1,19 @@
+-- name: AttachAskWallettoOrder :exec
+update orders
+set
+    updated_at = now(),
+    ask_wallet = $1
+where
+    id = $2;
+
+-- name: AttachBidTransactionToOrder :exec
+update orders
+set
+    updated_at = now(),
+    bid_transaction = $1
+where
+    id = $2;
+
 -- name: LookupPendingExecutions :many
 select
     id
