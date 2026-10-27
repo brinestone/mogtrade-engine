@@ -1,174 +1,77 @@
-# MogTrade - Trading Platform
+# MogTrade - Trading Platform Engine
 
-## Overview
+MogTrade is a Go-based trading platform engine that provides a RESTful API for frontends and clients to place trade orders on connected stock market exchanges. It features a modular architecture separated into four main packages: `app`, `core`, `infra`, and `services`.
 
-MogTrade is a comprehensive trading platform engine that provides a RESTful API for frontends and clients to connect to and execute trades on connected stock market exchanges. The platform is designed with high performance and low latency in mind, featuring a modular architecture that separates concerns across four main modules: app, core, infra, and services.
+## Core Features
+
+- **RESTful API** using GIN framework for order placement, account management, and market data
+- **SQLC-generated domain models and query functions** for type-safe database operations
+- **Asynq job queue** replacing CronJobScheduler for background task processing
+- **Multi-exchange data feeds** via Massive and Alpha Vantage APIs
+- **JWT authentication** with token encoding/verification and role authorization
+- **Sentry error tracking** and structured logging via `slog`
+- **Prometheus/Grafana monitoring** integrations
+- **Database migration system** with sqlc code generation (use `mogtrade-migrate` MCP tools)
+- **Order matching engine** in `services/matching/` with execution creation and fill logic
+- **Wallet & escrow management** with event-driven fill payouts
 
 ## Project Structure
 
-### app
-- Contains the main entrypoint executable
-- Uses GIN framework for REST API hosting
-- Implements IoC Container for dependency injection
-- Contains API controllers, middleware, and HTTP handlers
+| Package | Purpose |
+|---|---|
+| `app/` | Main entrypoint, IoC Container, GIN API, controllers, middleware |
+| `core/` | Library interfaces and abstractions (contracts, models) |
+| `infra/` | External integrations: DB, exchanges, job queues, storage, mail, events |
+| `services/` | Business logic: matching, orders, billing, auth, kyc, market, payments |
+| `go.work/` | Go workspace linking all modules |
 
-### core
-- Contains core library interfaces that can be used throughout the project
-- Defines interfaces for data access, authentication, and other core concepts
+## Key Modules
 
-### infra
-- Contains implementation details for external system integrations
-- Handles communication with external systems like stock exchanges
-- Contains database integration code and migration utilities
+- **Matching engine** (`services/matching/`) — Order book, execution creation, `ExecutionCreatedEventArgs`
+- **Wallet & escrow** (`app/controller/wallet.go`) — Fund management, `fillPendingExecutions`, event handler
+- **Asynq job queue** (`infra/jobs/`) — `AsynqJobQueue` with Redis, replaces `CronJobScheduler`
+- **Data feeds** (`infra/feed/`) — `MassiveDatasource`, `AlphaVantageDatasource` implementing `feed.Datasource`
+- **Auth & security** (`app/controller/auth_confirm.go`, `core/contract/`) — JWT, role authorizer, bearer claims
 
-### services
-- Contains service functions for business logic and core trading functionality
-- Implements the core library interfaces defined in the core module
+## Development
 
-### go.work and go.sum
-- Link the different modules together
-- Manage Go module dependencies
+### Build & Test
 
-## Key Features
-
-- RESTful API for trading, account management, and market data
-- Support for multiple exchange data feeds (currently Massive API)
-- Secure authentication with JWT and multi-factor authentication
-- Rate limiting and abuse protection mechanisms
-- Session management with JWT tokens
-- Comprehensive logging and error tracking via Sentry
-- Monitoring and observability with Prometheus and Grafana
-- SQLC-generated domain models and query functions
-- IoC Container for dependency injection
-
-## Massive API Integration
-
-The MassiveDatasource implements the feed.Datasource interface to fetch aggregate bar data from the Massive API (formerly Polygon.io). Key features include:
-
-- Fetches recent aggregate bars for a given symbol and time interval
-- Converts Massive's response format to the internal TradeData structure
-- Implements the feed.Datasource interface seamlessly
-- Configurable request timeout via MassiveConfig
-- Handles API rate limits and errors gracefully
-
-## Massive API Integration
-
-The MassiveDatasource queries the Massive API endpoint:
-```
-https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{from}/{to}?apiKey={apikey}
-```
-
-**Supported parameters:**
-- `symbol`: Trading symbol (e.g., "AAPL")
-- `interval`: Time range interval (5min, 30min, 60min, daily, weekly, monthly)
-- `from`/`to`: Date range in YYYY-MM-DD format
-
-**Response fields converted to TradeData:**
-- Open, High, Low, Close prices
-- Volume
-
-## Configuration
-
-### Environment Variables
-
-The following environment variable is required (already present in `app/cmd/.env`):
-
-```python
-MASSIVE_API_KEY=k2ZDg6YupZ45k7Wh8DtMpvplzwvm1cuD
-```
-
-### IOC Configuration
-
-The integration is configured in `app/cmd/ioc.go`:
-```go
-if err := ioc.Factory(func(h *market.ExchangeHub, l *slog.Logger) *market.ExchangePoller {
-    return market.NewExchangePoller(l.With("service", "exchange-poller"), h, []feed.Datasource{
-        feed.NewMassiveDatasource(os.Getenv("MASSIVE_API_KEY"), feed.MassiveConfig{RequestTimeout: 10 * time.Second}),
-    })
-}, true); err != nil {
-    return err
-}
-```
-
-## Building and Running
-
-The project builds successfully with:
 ```bash
-cd I:/mogtrade-engine/app && go build ./...
+go build ./...
+go test ./...
 ```
 
-## Development Tools
+### Code Conventions
 
-- **air**: For running local development application (description in .air.toml)
-- **mcp server**: Use the `mogtrade-dev-mcp` MCP server for database migration file generation
-- **sqlc**: For generating domain data models and query functions
+- Use `any` type (not `interface{}`)
+- Use `new(any)` to obtain pointers
+- Conventional commits: `type(scope): description`
+- Branches: `feat/<feature>`, `fix/<bug>`, `refactor/<purpose>`
+- PRs against `main` after approval
 
-## Contribution Guidelines
+### Ignored Files
 
-### How to Contribute
+- `.vfox/` — SDK symlinks
+- `app/cmd/.env` — Secret values (example: `.env.example`)
+- All files in `.gitignore`
 
-1. **Fork the repository** and create a feature branch:
-   ```
-   git checkout -b feature/your-feature
-   ```
+### Database Migrations
 
-2. **Follow coding standards**:
-   - Use `gofmt` to format code
-   - Follow Go conventions (error handling, naming, etc.)
-   - Use `new(any)` built-in function to obtain pointers to values
-   - Avoid using `interface{}` type, use `any` type where needed
+**Use the `mogtrade-migrate` MCP server tools for all schema changes.** Never write migration queries manually. The migration sequence `000050→000055` is cumulative and coherent.
 
-3. **Testing**:
-   - Write unit tests for all new functionality
-   - Ensure existing tests continue to pass
-   - Run `go test ./...` regularly
+## Environment Variables
 
-4. **Pull Request Process**:
-   - Submit PR with clear description of changes
-   - Include relevant screenshots or logs if needed
-   - Address reviewer comments promptly
+Required vars (example in `app/cmd/.env.example`):
 
-### Contribution Process
-
-1. Fork the repository
-2. Create a new branch with descriptive name (e.g., `feat/auth-jwt`)
-3. Make your changes
-4. Commit with clear, descriptive messages
-5. Push to your fork
-6. Open a Pull Request
-
-### Coding Standards
-
-- Use `gofmt` for code formatting
-- Follow Go conventions for naming and structure
-- Avoid using `interface{}` type, use `any` type where needed
-- Use `new(any)` built-in function to obtain pointers to values
-- Ignore `.vfox` folder and `app/cmd/.env` file (contains secret values)
-- Ignore all files listed in `.gitignore` files
-
-### Testing
-
-- Write unit tests for all new functionality
-- Ensure existing tests continue to pass
-- Run `go test ./...` before pushing changes
-- Use `go test -cover` to check coverage
-
-### Code Review
-
-- PRs will be reviewed by project maintainers
-- Address feedback promptly
-- Do not merge without approval
-
-## Testing
-
-- Run `go test ./...` to execute all tests
-- Use `go test -cover` to check test coverage
-- Ensure all tests pass before submitting PR
-
-## License
-
-MIT License
-
-## Contact
-
-For questions or support, please contact the project maintainers via GitHub Issues or email.
+- `MASSIVE_API_KEY` — Massive API key for market data
+- `ALPHAVANTAGE_API_KEY` — Alpha Vantage API key
+- `DB_URL` — PostgreSQL connection string
+- `JWT_SECRET` — JWT signing secret
+- `PORT` — Server port
+- `REDIS_URL` — Redis connection for Asynq job queue
+- `S3_PLATFORM`, `S3_ACCESS_KEY`, `S3_SECRET`, `S3_ORIGIN`, `S3_REGION` — Storage configuration
+- `MAILTRAP_API_KEY` — MailTrap SMTP service
+- `EXCHANGE_RATE_API_KEY` — Currency conversion API
+- `ALLOWED_ORIGINS` — CORS origins (semicolon-separated)
+- `HOST` — Host address for token encoding
