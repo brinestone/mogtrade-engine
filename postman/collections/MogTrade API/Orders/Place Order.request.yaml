@@ -26,11 +26,11 @@ body:
   type: json
   content: |-
     {
-      "symbol": "BTCUSD",
+      "symbol": "BTCJPY",
       "currency": "USD",
       "type": "limit",
-      "side": "sell",
-      "quantity": 0.5,
-      "limitPrice": 2000,
+      "side": "buy",
+      "quantity": 3,
+      "limitPrice": 5,
       "walletType": "virtual"
     }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/brinestone/mogtrade/core/contract"
 	"github.com/brinestone/mogtrade/infra/db"
-	"github.com/brinestone/mogtrade/web/helpers"
+	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/shopspring/decimal"
@@ -59,11 +59,12 @@ func createSystemUser(ctx context.Context, q *db.Queries, l *slog.Logger, idg co
 	}
 
 	l.Debug("seeding system user credential account")
+	pwd, _ := auth.HashPassword(os.Getenv("SYSTEM_PWD"))
 	if _, err := q.CreateCredentialAccount(ctx, db.CreateCredentialAccountParams{
 		ID:        idg(),
 		AccountID: os.Getenv("SYSTEM_EMAIl"),
 		UserID:    userId,
-		Password:  helpers.Ptr(os.Getenv("SYSTEM_PWD")),
+		Password:  &pwd,
 	}); err != nil {
 		return err
 	}
