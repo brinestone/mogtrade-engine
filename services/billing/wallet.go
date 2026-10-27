@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/shopspring/decimal"
@@ -75,8 +76,8 @@ func UpdateWalletTransactionStatus(ctx context.Context, q *db.Queries, params Up
 		return err
 	}
 
-	if !isTransitionValid(tx, params.Status) {
-		return ErrInvalidTransactionTransition
+	if !isWalletTransactionTransitionValid(tx, params.Status) {
+		return fmt.Errorf("%w: cannot transition from %s -> %s", ErrInvalidTransactionTransition, tx.Status, params.Status)
 	}
 
 	err = q.UpdateTransactionStatusById(ctx, db.UpdateTransactionStatusByIdParams{
@@ -183,14 +184,26 @@ func CreateUserWallet(ctx context.Context, q *db.Queries, req CreateWalletParams
 	}
 	return q.RefreshWalletSnapshots(ctx)
 }
-func isTransitionValid(tx db.WalletTransaction, status db.TransactionStatus) bool {
+func isWalletTransactionTransitionValid(tx db.WalletTransaction, status db.TransactionStatus) bool {
+	var validStates []db.TransactionStatus
 	switch tx.Status {
 	case db.TransactionStatusCreated:
-		return status == db.TransactionStatusProcessing || status == db.TransactionStatusCancelled
+		validStates = []db.TransactionStatus{
+			db.TransactionStatusProcessing,
+			db.TransactionStatusCancelled,
+			db.TransactionStatusCompleted,
+		}
 	case db.TransactionStatusProcessing:
-		return status == db.TransactionStatusFailed || status == db.TransactionStatusCancelled || status == db.TransactionStatusCompleted
+		validStates = []db.TransactionStatus{
+			db.TransactionStatusFailed,
+			db.TransactionStatusCancelled,
+			db.TransactionStatusCompleted,
+		}
 	case db.TransactionStatusFailed:
-		return status == db.TransactionStatusProcessing
+		validStates = []db.TransactionStatus{
+			db.TransactionStatusProcessing,
+		}
 	}
-	return false
+
+	return slices.Contains(validStates, status)
 }

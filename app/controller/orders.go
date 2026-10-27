@@ -115,11 +115,10 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		}
 		systemWallet := helpers.GetSystemWalletByType(wallet.WalletType)
 		logger.Debug("getting exchange rates", "currency", payload.Currency)
-		rate, err := o.cc.GetDefaultExchangeRates(ctx.Request.Context(), payload.Currency)
+		exchangeRates, err := helpers.GetDefaultExchangeRateDecimalFor(ctx, payload.Currency)
 		if err != nil {
 			return err
 		}
-		exchangerate := decimal.NewFromFloat32(1 / rate[0])
 		logger.Debug("creating order record")
 		err = orders.PlaceOrder(ctx.Request.Context(), q, orders.PlaceOrderParams{
 			TracingId:            tracingId,
@@ -129,7 +128,7 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			SystemWalletId:       systemWallet,
 			PlacedBy:             helpers.GetCurrentUserId(ctx),
 			Currency:             payload.Currency,
-			ExchangeRateSnapshot: exchangerate,
+			ExchangeRateSnapshot: exchangeRates[0],
 			Symbol:               payload.Symbol,
 			IdempotencyToken:     payload.IdempotencyToken,
 			Side:                 db.OrderSide(payload.Side),
@@ -170,8 +169,9 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			}
 		}
 
+		txId := o.idGenerator()
 		err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
-			Id:               o.idGenerator(),
+			Id:               txId,
 			Src:              &wallet.WalletID,
 			Dest:             &systemWallet,
 			Intent:           "order placed",
@@ -179,13 +179,18 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 			DoneBy:           helpers.GetCurrentUserId(ctx),
 			TracingId:        tracingId,
 			Currency:         payload.Currency,
-			ExchangeRate:     exchangerate,
+			ExchangeRate:     exchangeRates[0],
 			Value:            decimal.NewFromFloat32(payload.Quantity).Mul(payload.LimitPrice.Decimal),
 		})
 		if err != nil {
 			return err
 		}
-		return nil
+
+		err = billing.UpdateWalletTransactionStatus(ctx, q, billing.UpdateTransactionStatusParams{
+			TransactionId: txId,
+			Status:        db.TransactionStatusCompleted,
+		})
+		return err
 	})
 
 	if err != nil {
@@ -285,7 +290,7 @@ func (o *Orders) handleCancelOrder(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
-func (c *Orders) MountV1(r *gin.RouterGroup) {
+func (c *Orders) MountV1(ctx context.Context, r *gin.RouterGroup) {
 	jwtMiddleware := helpers.ProvideJWTMiddleware()
 	kycMiddleware := helpers.ProvideKYCMiddleware()
 
@@ -298,12 +303,58 @@ func (c *Orders) MountV1(r *gin.RouterGroup) {
 
 	mutations := secured.Group("/:order")
 	mutations.DELETE("", c.handleCancelOrder)
-	c.subscribeToEventsV1()
-	ctx := context.TODO()
+	c.subscribeToEventsV1(ctx)
 	go c.bootstrapMatchingEngine(ctx)
+	go c.applyPendingFills(ctx)
 }
 
-func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract.Event) {
+func (c *Orders) applyPendingFills(ctx context.Context) {
+	batches := 0
+	added := 0
+	filled := make([]string, 0)
+	err := helpers.WithTransactionRepo(ctx, func(q *db.Queries) error {
+		const batchSize = 1000
+		cursor := "00000000000000000000000000"
+		for {
+			batch, err := q.LookupPendingExecutions(ctx, db.LookupPendingExecutionsParams{ID: cursor, Limit: batchSize})
+			if err != nil {
+				return fmt.Errorf("could not fetch pending executions: %w", err)
+			}
+
+			if len(batch) == 0 {
+				break
+			}
+
+			cursor = batch[len(batch)-1]
+			for _, exec := range batch {
+				err := orders.ApplyExecutionFill(ctx, q, exec)
+				if err != nil {
+					return err
+				}
+
+				filled = append(filled, exec)
+				added++
+			}
+			batches++
+		}
+
+		c.logger.Info("executions filled", "filled", added, "batches", batches, "batchSize", batchSize)
+		return nil
+	})
+
+	if err != nil {
+		c.logger.Error("filling pending executions failed", "err", err.Error())
+	} else {
+		c.logger.Info("filled pending executions", "count", added*batches)
+	}
+
+	for _, id := range filled {
+		helpers.PublishEvent(ctx, matching.EventKeyExecutionFilled, matching.ExecutionFilledEventArgs{
+			ExecutionId: id,
+		})
+	}
+}
+func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract.BusEvent) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -318,86 +369,64 @@ func (c *Orders) handleOnMatchFoundEvent(ctx context.Context, ch <-chan contract
 				continue
 			}
 
-			c.logger.Info("order match found, creating execution", "buy", event.BuyOrder, "sell", event.SellOrder)
-			type executionPairs struct {
-				buyExecution  string
-				sellExecution string
-			}
-			pair, err := helpers.WithValueTransactionRepo(ctx, func(q *db.Queries) (executionPairs, error) {
-				pair := executionPairs{
-					buyExecution:  c.idGenerator(),
-					sellExecution: c.idGenerator(),
-				}
-				buyOrder, err := q.FindOrderById(ctx, event.BuyOrder)
+			c.logger.Info("order match found, creating execution", "buy", event.Bid, "sell", event.Ask)
+			execId, err := helpers.WithValueTransactionRepo(ctx, func(q *db.Queries) (string, error) {
+				var execId = c.idGenerator()
+				bid, err := q.FindOrderById(ctx, event.Bid)
 				if err != nil {
-					return pair, err
+					return "", err
 				}
 
-				sellOrder, err := q.FindOrderById(ctx, event.SellOrder)
+				ask, err := q.FindOrderById(ctx, event.Ask)
 				if err != nil {
-					return pair, err
+					return "", err
 				}
 
+				rates, err := helpers.GetDefaultExchangeRateDecimalFor(ctx, bid.Currency, ask.Currency)
+				if err != nil {
+					return "", err
+				}
 				tracingId := c.idGenerator()
-				idempotencyToken := helpers.HashThese(*buyOrder.ClientOrderID, *sellOrder.ClientOrderID)
-				err = orders.CreateExecution(ctx, q, orders.CreateExecutionParams{
-					OrderId:          event.BuyOrder,
-					Id:               pair.buyExecution,
-					TracingId:        tracingId,
-					Quantity:         event.MatchQuantity,
-					FeeCurrency:      buyOrder.Currency,
-					FeeRate:          buyOrder.ExchangeRate,
-					FeeAmount:        buyOrder.Fee,
-					Price:            buyOrder.LimitPrice.Decimal,
-					IdempotencyToken: idempotencyToken,
+				_, err = orders.CreateExecution(ctx, q, orders.CreateExecutionParams{
+					Id:              execId,
+					Bid:             event.Bid,
+					Ask:             event.Ask,
+					User:            helpers.GetSystemUserId(),
+					TracingId:       tracingId,
+					MatchedQuantity: event.MatchQuantity,
+					BidExchangeRate: rates[0],
+					AskExchangeRate: rates[1],
 				})
+
+				err = orders.ApplyExecutionFill(ctx, q, execId)
 				if err != nil {
-					return pair, err
+					return "", err
 				}
 
-				err = orders.CreateExecution(ctx, q, orders.CreateExecutionParams{
-					OrderId:          event.SellOrder,
-					Id:               pair.sellExecution,
-					TracingId:        tracingId,
-					Quantity:         event.MatchQuantity,
-					IdempotencyToken: idempotencyToken,
-					FeeCurrency:      sellOrder.Currency,
-					FeeRate:          sellOrder.ExchangeRate,
-					FeeAmount:        sellOrder.Fee,
-					Price:            sellOrder.LimitPrice.Decimal,
-				})
-
-				return pair, err
+				return execId, nil
 			})
 			if err != nil {
 				if errors.Is(err, orders.ErrDuplicateExecutionFound) {
-					c.logger.Warn("duplicate order execution found", "sell", event.SellOrder, "buy", event.BuyOrder, "qty", event.MatchQuantity)
+					c.logger.Warn("duplicate order execution found", "sell", event.Ask, "buy", event.Bid, "qty", event.MatchQuantity)
 					return
 				}
-				c.logger.Error("could not create execution", "err", err.Error(), "sell", event.SellOrder, "buy", event.BuyOrder, "qty", event.MatchQuantity)
+				c.logger.Error("could not create execution", "err", err.Error(), "sell", event.Ask, "buy", event.Bid, "qty", event.MatchQuantity)
 				return
 			}
 
-			c.eb.Publish(matching.EventKeyExecutionCreated, matching.ExecutionCreatedEventArgs{
-				ExecutionId: pair.buyExecution,
-				MatchedAt:   event.MatchedAt,
-			})
-
-			c.eb.Publish(matching.EventKeyExecutionCreated, matching.ExecutionCreatedEventArgs{
-				ExecutionId: pair.sellExecution,
-				MatchedAt:   event.MatchedAt,
+			c.eb.Publish(matching.EventKeyExecutionFilled, matching.ExecutionFilledEventArgs{
+				ExecutionId: execId,
 			})
 		}
 	}
 }
 
-func (c *Orders) subscribeToEventsV1() {
-	ctx := context.TODO()
+func (c *Orders) subscribeToEventsV1(ctx context.Context) {
 	matchFound := c.eb.Subscribe(ctx, matching.EventKeyOrderMatched)
 	go c.handleOnMatchFoundEvent(ctx, matchFound)
 }
 
-func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdFactory, e *matching.Engine, eb contract.EventBus, cc contract.CurrencyConverter) *Orders {
+func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdFactory, e *matching.Engine, eb contract.EventBus) *Orders {
 	return &Orders{
 		repo:           q,
 		logger:         l.With("controller", "orders"),
@@ -406,6 +435,5 @@ func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p
 		idGenerator:    idg,
 		matchingEngine: e,
 		eb:             eb,
-		cc:             cc,
 	}
 }

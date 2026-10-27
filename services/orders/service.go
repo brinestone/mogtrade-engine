@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrDuplicateOrder          = errors.New("order already exists")
+	ErrExecutionNotFound       = errors.New("execution not found")
 	ErrDuplicateExecutionFound = errors.New("execution already exists")
 	ErrOrderNotFound           = errors.New("order was not found")
 	ErrInvalidOrderTransition  = errors.New("invalid order transition")
@@ -155,7 +156,6 @@ func PlaceOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
 		Quantity:      p.Quantity,
 		LimitPrice:    p.LimitPrice,
 		StopPrice:     p.StopPrice,
-		Fee:           p.LimitPrice.Decimal,
 		Currency:      p.Currency,
 		ExchangeRate:  p.ExchangeRateSnapshot,
 		ClientOrderID: &p.IdempotencyToken,
@@ -172,48 +172,104 @@ func PlaceOrder(ctx context.Context, q *db.Queries, p PlaceOrderParams) error {
 }
 
 type CreateExecutionParams struct {
-	IdempotencyToken string
-	OrderId          string
-	Id               string
-	FeeCurrency      string
-	TracingId        string
-	FeeRate          decimal.Decimal
-	FeeAmount        decimal.Decimal
-	Price            decimal.Decimal
-	Quantity         decimal.Decimal
+	Id              string
+	Bid             string
+	Ask             string
+	User            string
+	TracingId       string
+	MatchedQuantity decimal.Decimal
+	BidExchangeRate decimal.Decimal
+	AskExchangeRate decimal.Decimal
 }
 
-func CreateExecution(ctx context.Context, q *db.Queries, p CreateExecutionParams) error {
-	order, err := q.FindOrderById(ctx, p.OrderId)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrOrderNotFound
-		}
-		return err
-	}
-	err = q.CreateExecution(ctx, db.CreateExecutionParams{
-		ID:               p.Id,
-		User:             order.UserID,
-		Order:            p.OrderId,
-		Price:            p.Price,
-		Symbol:           order.Symbol,
-		FeeRate:          p.FeeRate,
-		Quantity:         p.Quantity,
-		FeeAmount:        p.FeeAmount,
-		OrderSide:        order.Side,
-		OrderType:        order.OrderType,
-		TracingID:        p.TracingId,
-		ExecStatus:       db.ExecutionStatusFilled,
-		OrderStatus:      *order.Status,
-		FeeCurrency:      p.FeeCurrency,
-		IdempotencyToken: p.IdempotencyToken,
+func CreateExecution(ctx context.Context, q *db.Queries, p CreateExecutionParams) (db.Execution, error) {
+	var exec db.Execution
+
+	exists, err := q.ExecutionExists(ctx, db.ExecutionExistsParams{
+		Ask: &p.Ask,
+		Bid: &p.Bid,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "executions_idempotency_token_order_uidx" {
-			return ErrDuplicateExecutionFound
+		return exec, err
+	} else if !exists {
+		return exec, ErrDuplicateExecutionFound
+	}
+	bid, err := q.FindOrderById(ctx, p.Bid)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return exec, fmt.Errorf("%w: bid order not found: %s", ErrOrderNotFound, p.Bid)
+		}
+		return exec, err
+	}
+	bidWallet, _ := q.FindWalletFromWalletTransactionSrc(ctx, *bid.BidTransaction)
+	ask, err := q.FindOrderById(ctx, p.Ask)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return exec, fmt.Errorf("%w: ask order not found: %s", ErrOrderNotFound, p.Ask)
+		}
+		return exec, err
+	}
+
+	execValue := p.BidExchangeRate.Mul(bid.LimitPrice.Decimal).Mul(p.MatchedQuantity)
+	exec, err = q.CreateExecution(ctx, db.CreateExecutionParams{
+		ID:                      p.Id,
+		MatchQuantity:           p.MatchedQuantity,
+		Symbol:                  bid.Symbol,
+		BidPrice:                bid.LimitPrice.Decimal,
+		BidStatus:               *bid.Status,
+		BidCurrency:             bid.Currency,
+		BidExchangeRateSnapshot: p.BidExchangeRate,
+		ExecValue:               execValue,
+		Ask:                     &p.Ask,
+		AskPrice:                ask.LimitPrice.Decimal,
+		AskStatus:               *ask.Status,
+		AskCurrency:             ask.Currency,
+		AskExchangeRateSnapshot: p.AskExchangeRate,
+		TracingID:               p.TracingId,
+		User:                    &p.User,
+		BidWallet:               &bidWallet.ID,
+		AskWallet:               ask.AskWallet,
+		WalletsType:             bidWallet.Type,
+		Bid:                     &p.Bid,
+	})
+	return exec, nil
+}
+
+func ApplyExecutionFill(ctx context.Context, q *db.Queries, execId string) error {
+	exec, err := q.FindExecutionById(ctx, execId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: could not find execution: %s", ErrExecutionNotFound, execId)
 		}
 		return err
 	}
-	return nil
+
+	err = q.FillOrderById(ctx, db.FillOrderByIdParams{
+		Quantity: exec.MatchQuantity,
+		ID:       *exec.Ask,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	err = q.FillOrderById(ctx, db.FillOrderByIdParams{
+		Quantity: exec.MatchQuantity,
+		ID:       *exec.Bid,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = q.UpdateExecutionStatus(ctx, db.UpdateExecutionStatusParams{
+		ExecStatus: db.ExecutionStatusFilled,
+		ID:         execId,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = q.UpdateExecutionOrdersStatuses(ctx, execId)
+
+	return err
 }

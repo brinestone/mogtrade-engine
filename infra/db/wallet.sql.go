@@ -65,6 +65,30 @@ func (q *Queries) CreateVirtualWallet(ctx context.Context, arg CreateVirtualWall
 	return err
 }
 
+const findWalletFromWalletTransactionSrc = `-- name: FindWalletFromWalletTransactionSrc :one
+select
+    w.id, w.owner, w.starting_balance, w.type
+from
+    wallet_transactions wt
+    inner join wallets w on w.id = wt.src
+where
+    wt.id = $1
+limit
+    1
+`
+
+func (q *Queries) FindWalletFromWalletTransactionSrc(ctx context.Context, id string) (Wallet, error) {
+	row := q.db.QueryRow(ctx, findWalletFromWalletTransactionSrc, id)
+	var i Wallet
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.StartingBalance,
+		&i.Type,
+	)
+	return i, err
+}
+
 const findWalletSnapshotByOwnerId = `-- name: FindWalletSnapshotByOwnerId :one
 SELECT
     wallet_id, owner_id, starting_balance, current_balance, total_transactions, last_activity_at, snapshot_created_at, wallet_type

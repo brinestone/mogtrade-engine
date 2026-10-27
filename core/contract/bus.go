@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-type Event struct {
+type BusEvent struct {
 	Data      any
 	Timestamp time.Time
 }
-type DataChannel chan Event
+type DataChannel chan BusEvent
 type EventBus interface {
-	Subscribe(context.Context, string) <-chan Event
+	Subscribe(context.Context, string) <-chan BusEvent
 	Publish(string, any) error
 }

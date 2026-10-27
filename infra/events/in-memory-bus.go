@@ -13,7 +13,7 @@ type memoryEventBus struct {
 	subs map[string][]contract.DataChannel
 }
 
-func (m *memoryEventBus) Subscribe(ctx context.Context, topic string) <-chan contract.Event {
+func (m *memoryEventBus) Subscribe(ctx context.Context, topic string) <-chan contract.BusEvent {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -31,11 +31,11 @@ func (m *memoryEventBus) Publish(topic string, data any) error {
 	defer m.mu.RUnlock()
 
 	if channels, found := m.subs[topic]; found {
-		go func(chans []contract.DataChannel, ev contract.Event) {
+		go func(chans []contract.DataChannel, ev contract.BusEvent) {
 			for _, ch := range chans {
 				ch <- ev
 			}
-		}(channels, contract.Event{Data: data, Timestamp: time.Now()})
+		}(channels, contract.BusEvent{Data: data, Timestamp: time.Now()})
 	}
 	return nil
 }

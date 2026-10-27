@@ -57,8 +57,9 @@ func (ns NullAccountProvider) Value() (driver.Value, error) {
 type ExecutionStatus string
 
 const (
-	ExecutionStatusFailed ExecutionStatus = "failed"
-	ExecutionStatusFilled ExecutionStatus = "filled"
+	ExecutionStatusPending ExecutionStatus = "pending"
+	ExecutionStatusFailed  ExecutionStatus = "failed"
+	ExecutionStatusFilled  ExecutionStatus = "filled"
 )
 
 func (e *ExecutionStatus) Scan(src interface{}) error {
@@ -548,23 +549,49 @@ type Account struct {
 	UpdatedAt             pgtype.Timestamp
 }
 
+type Execution struct {
+	ID                      string
+	MatchQuantity           decimal.Decimal
+	Symbol                  string
+	User                    *string
+	Bid                     *string
+	BidPrice                decimal.Decimal
+	BidStatus               OrderStatus
+	BidCurrency             string
+	BidExchangeRateSnapshot decimal.Decimal
+	ExecValue               decimal.Decimal
+	Ask                     *string
+	AskPrice                decimal.Decimal
+	AskStatus               OrderStatus
+	AskCurrency             string
+	AskExchangeRateSnapshot decimal.Decimal
+	ExecStatus              ExecutionStatus
+	RecordedAt              pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	TracingID               string
+	AskWallet               *string
+	BidWallet               *string
+	WalletsType             WalletType
+}
+
 type Order struct {
-	UserID        *string
-	Symbol        string
-	Side          OrderSide
-	OrderType     OrderType
-	Quantity      decimal.Decimal
-	LimitPrice    decimal.NullDecimal
-	StopPrice     decimal.NullDecimal
-	ID            string
-	ClientOrderID *string
-	Status        *OrderStatus
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	TracingID     string
-	Fee           decimal.Decimal
-	Currency      string
-	ExchangeRate  decimal.Decimal
+	UserID         *string
+	Symbol         string
+	Side           OrderSide
+	OrderType      OrderType
+	Quantity       decimal.Decimal
+	LimitPrice     decimal.NullDecimal
+	StopPrice      decimal.NullDecimal
+	ID             string
+	ClientOrderID  *string
+	Status         *OrderStatus
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	TracingID      string
+	Currency       string
+	ExchangeRate   decimal.Decimal
+	BidTransaction *string
+	AskWallet      *string
 }
 
 type User struct {
@@ -576,6 +603,13 @@ type User struct {
 	CreatedAt     pgtype.Timestamp
 	UpdatedAt     pgtype.Timestamp
 	Prefs         []byte
+}
+
+type Wallet struct {
+	ID              string
+	Owner           *string
+	StartingBalance decimal.NullDecimal
+	Type            WalletType
 }
 
 type WalletSnapshot struct {

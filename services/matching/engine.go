@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	EventKeyOrderMatched     string = "orders.match"
-	EventKeyExecutionCreated string = "execution.create"
+	EventKeyOrderMatched    string = "orders.match"
+	EventKeyExecutionFilled string = "execution.fill"
 )
 
 type Engine struct {
@@ -32,17 +32,17 @@ type PlaceMatchOrderParams struct {
 }
 
 type OrderMatchedEventArgs struct {
-	BuyOrder          string
-	SellOrder         string
+	Bid               string
+	Ask               string
 	Symbol            string
 	MatchedAt         time.Time
 	MatchQuantity     decimal.Decimal
 	RemainingQuantity decimal.Decimal
 }
 
-type ExecutionCreatedEventArgs struct {
+type ExecutionFilledEventArgs struct {
 	ExecutionId string
-	MatchedAt   time.Time
+	// MatchedAt   time.Time
 }
 
 func (e *Engine) PlaceMatchOrder(p PlaceMatchOrderParams) {
@@ -151,8 +151,8 @@ func (e *Engine) findMatches(symbol string) {
 
 		// Emit match event
 		e.bus.Publish(EventKeyOrderMatched, OrderMatchedEventArgs{
-			BuyOrder:          bidEntry.OrderId,
-			SellOrder:         askEntry.OrderId,
+			Bid:               bidEntry.OrderId,
+			Ask:               askEntry.OrderId,
 			Symbol:            symbol,
 			MatchedAt:         time.Now(),
 			MatchQuantity:     execQty,

@@ -1,16 +1,16 @@
 #:schema https://json.schemastore.org/any.json
-env_files = ["app/cmd/.env"]
+env_files = [".env"]
 root = "."
 testdata_dir = "testdata"
-tmp_dir = "tmp"
+tmp_dir = "tmp/api"
 
 [build]
 args_bin = []
-bin = "./tmp/main"
-cmd = "go build -o ./app/cmd/tmp/main ./app/cmd"
+bin = "./tmp/api/main"
+cmd = "go build -o ./tmp/api/main ./app/cmd"
 delay = 1000
-entrypoint = ["./tmp/main"]
-exclude_dir = ["logs","assets", "tmp", "vendor", "smithy", "build", "testdata", ".vfox", "postman", ".postman",".vscode", "infra/scripts", "mcp"]
+entrypoint = ["./tmp/api/main"]
+exclude_dir = ["worker","logs","assets", "tmp", "vendor", "smithy", "build", "testdata", ".vfox", "postman", ".postman",".vscode", "infra/scripts", "mcp"]
 exclude_file = [".vfox.toml", ".gitignore"]
 exclude_regex = ["_test.go", ".sql"]
 exclude_unchanged = true
@@ -28,20 +28,14 @@ post_cmd = []
 pre_cmd = []
 rerun = false
 rerun_delay = 500
-send_interrupt = false
+send_interrupt = true 
 stop_on_error = false
-
-# [[build.rules]]
-# name = "migrations"
-# include_dir = ["migrations"]
-# include_ext = ["sql"]
-# cmd = "migrate -database \"${DB_URL}\" -path migrations up"
 
 [build.windows]
 args_bin = []
-bin = "tmp\\main.exe"
-cmd = "go build -o ./tmp/main.exe ./app/cmd"
-entrypoint = ["tmp\\main.exe"]
+bin = "tmp\\api\\main.exe"
+cmd = "go build -o ./tmp/api/main.exe ./app/cmd"
+entrypoint = ["tmp\\api\\main.exe"]
 full_bin = ""
 post_cmd = []
 pre_cmd = []
