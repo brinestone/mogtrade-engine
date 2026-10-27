@@ -22,7 +22,6 @@ import (
 	"github.com/brinestone/mogtrade/infra/mail"
 	"github.com/brinestone/mogtrade/infra/sources"
 	"github.com/brinestone/mogtrade/infra/storage"
-	"github.com/brinestone/mogtrade/services/jobs"
 	"github.com/brinestone/mogtrade/services/market"
 	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/services/orders"
@@ -149,9 +148,6 @@ func setupAdapters(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ioc.Factory(func(l *slog.Logger) contract.JobScheduler {
-		return adapter.NewCronJobScheduler(ctx, l.With("service", "job-scheduler"))
-	}, true)
 	ioc.Factory(func() contract.EventBus {
 		return events.UseInMemoryEventBus()
 	}, true)
@@ -187,25 +183,10 @@ func parseVars() error {
 	return nil
 }
 
-func startJobScheduler(ctx context.Context) {
-	ioc.Invoke(ctx, func(s contract.JobScheduler) {
-		s.Start()
-	})
-}
 func pullMarketFeed(ctx context.Context) {
 	ioc.Invoke(ctx, func(e *market.ExchangePoller) {
 		e.Start(ctx)
 	})
-}
-func registerBackgroundJobs(ctx context.Context) error {
-	_, err := ioc.Invoke(ctx, func(s contract.JobScheduler, pool *pgxpool.Pool, l *slog.Logger) error {
-		err := s.RegisterJob(jobs.NewStaleTokenRemoverJob("0 0 * * 6", pool, l)) // Every sunday midnight
-		if err != nil {
-			panic(err)
-		}
-		return nil
-	})
-	return err
 }
 
 func setupLogging(ctx context.Context) error {
@@ -288,10 +269,6 @@ func bootstrapApplication(ctx context.Context) {
 		panic(err)
 	}
 	api.SetupMiddlewares()
-
-	if err := registerBackgroundJobs(ctx); err != nil {
-		panic(err)
-	}
 }
 func startAsyncTasks(ctx context.Context) {
 	pool, err := ioc.Get[*pgxpool.Pool](ctx)
@@ -308,6 +285,5 @@ func startAsyncTasks(ctx context.Context) {
 	}
 
 	performSeeding(ctx, *pool, *l, *idg)
-	startJobScheduler(ctx)
 	go pullMarketFeed(ctx)
 }

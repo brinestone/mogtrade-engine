@@ -45,11 +45,11 @@ func TestPlaceMatchOrder_BasicMatch(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected OrderMatched event data, got %T", _ev.Data)
 		}
-		if ev.BuyOrder != "buy-1" {
-			t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
+		if ev.Bid != "buy-1" {
+			t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.Bid)
 		}
-		if ev.SellOrder != "sell-1" {
-			t.Errorf("expected SellOrder='sell-1', got '%s'", ev.SellOrder)
+		if ev.Ask != "sell-1" {
+			t.Errorf("expected SellOrder='sell-1', got '%s'", ev.Ask)
 		}
 		if ev.Symbol != "BTCUSD" {
 			t.Errorf("expected Symbol='BTCUSD', got '%s'", ev.Symbol)
@@ -126,11 +126,11 @@ func TestPlaceMatchOrder_PartialFill(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected OrderMatched, got %T", _ev.Data)
 		}
-		if ev.BuyOrder != "buy-1" {
-			t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.BuyOrder)
+		if ev.Bid != "buy-1" {
+			t.Errorf("expected BuyOrder='buy-1', got '%s'", ev.Bid)
 		}
-		if ev.SellOrder != "sell-1" {
-			t.Errorf("expected SellOrder='sell-1', got '%s'", ev.SellOrder)
+		if ev.Ask != "sell-1" {
+			t.Errorf("expected SellOrder='sell-1', got '%s'", ev.Ask)
 		}
 		if !ev.MatchQuantity.Equal(decimal.NewFromFloat(4.0)) {
 			t.Errorf("expected MatchQuantity=4.0, got '%s'", ev.MatchQuantity)

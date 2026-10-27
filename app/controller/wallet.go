@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/services/auth"
 	"github.com/brinestone/mogtrade/services/billing"
+	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/web/helpers"
 	httppayloads "github.com/brinestone/mogtrade/web/payloads/http"
 	"github.com/gin-gonic/gin"
@@ -121,6 +123,7 @@ func (w *Wallets) createUserWallets(c *gin.Context) error {
 
 	w.logger.Info("created user wallet", "uid", helpers.GetCurrentUserId(c), "type", db.WalletTypeVirtual)
 	txId := w.idGenerator()
+	exr, err := helpers.GetDefaultExchangeRateDecimalFor(c, "USD")
 	err = billing.RecordWalletTransaction(c.Request.Context(), repo, billing.RecordWalletTransactionParams{
 		Id:               txId,
 		Dest:             &virtualId,
@@ -129,7 +132,7 @@ func (w *Wallets) createUserWallets(c *gin.Context) error {
 		DoneBy:           helpers.GetCurrentUserId(c),
 		TracingId:        w.idGenerator(),
 		Currency:         "USD", // TODO: Get from user prefs
-		ExchangeRate:     decimal.NewFromInt(1),
+		ExchangeRate:     exr[0],
 		Value:            w.vStartingBalance,
 		Src:              nil,
 	})
@@ -138,11 +141,6 @@ func (w *Wallets) createUserWallets(c *gin.Context) error {
 		return err
 	}
 
-	err = billing.UpdateWalletTransactionStatus(c.Request.Context(), repo, billing.UpdateTransactionStatusParams{TransactionId: txId, Status: db.TransactionStatusProcessing})
-	if err != nil {
-		w.logger.Error("could not update wallet transaction", "id", txId, "uid", helpers.GetCurrentUserId(c))
-		return err
-	}
 	err = billing.UpdateWalletTransactionStatus(c.Request.Context(), repo, billing.UpdateTransactionStatusParams{TransactionId: txId, Status: db.TransactionStatusCompleted})
 	if err != nil {
 		w.logger.Error("could not update wallet transaction", "id", txId, "uid", helpers.GetCurrentUserId(c))
@@ -153,20 +151,87 @@ func (w *Wallets) createUserWallets(c *gin.Context) error {
 	return nil
 }
 
-func (w *Wallets) MountV1(r *gin.RouterGroup) {
+func (w *Wallets) MountV1(ctx context.Context, r *gin.RouterGroup) {
 	jwtMiddleware := helpers.ProvideJWTMiddleware()
 
 	secured := r.Group("/wallet", jwtMiddleware())
 	secured.GET("/status/:type", w.handleGetBalance)
+	w.subscribeToEventsV1(ctx)
 }
 
-func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool, vStart decimal.Decimal, rStart decimal.Decimal, idg contract.IdFactory) *Wallets {
+func (w *Wallets) handleOnExecutionFilled(ctx context.Context, ch <-chan contract.BusEvent) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case raw, ok := <-ch:
+			if !ok {
+				return
+			}
+			event, ok := raw.Data.(matching.ExecutionFilledEventArgs)
+			if !ok {
+				continue
+			}
+
+			txId := w.idGenerator()
+
+			err := helpers.WithTransactionRepo(ctx, func(q *db.Queries) error {
+				ex, err := q.FindExecutionById(ctx, event.ExecutionId)
+				if err != nil {
+					return err
+				}
+
+				err = billing.RecordWalletTransaction(ctx, q, billing.RecordWalletTransactionParams{
+					Id:               txId,
+					Src:              new(helpers.GetSystemWalletByType(ex.WalletsType)),
+					Dest:             ex.AskWallet,
+					Intent:           "fill payout",
+					IdempotencyToken: w.idGenerator(),
+					DoneBy:           helpers.GetSystemUserId(),
+					TracingId:        w.idGenerator(),
+					Currency:         ex.BidCurrency,
+					ExchangeRate:     ex.BidExchangeRateSnapshot,
+					Value:            ex.ExecValue,
+				})
+
+				if err != nil {
+					return err
+				}
+
+				err = billing.UpdateWalletTransactionStatus(ctx, q, billing.UpdateTransactionStatusParams{
+					TransactionId: txId,
+					Status:        db.TransactionStatusCompleted,
+				})
+
+				if err != nil {
+					return err
+				}
+				return nil
+			})
+
+			if err != nil {
+				w.logger.Error("could not record wallet payout for execution", "execution", event.ExecutionId, "err", err.Error())
+			} else {
+				w.logger.Info("fulfilled payout", "execution", event.ExecutionId)
+			}
+		}
+	}
+}
+
+func (w *Wallets) subscribeToEventsV1(ctx context.Context) {
+	helpers.UseEventBus(ctx, func(bus contract.EventBus) {
+		ch := bus.Subscribe(ctx, matching.EventKeyExecutionFilled)
+		go w.handleOnExecutionFilled(ctx, ch)
+	})
+}
+
+func NewWalletsController(repo *db.Queries, logger *slog.Logger, pool *pgxpool.Pool, idg contract.IdFactory) *Wallets {
 	return &Wallets{
-		repo,
-		logger.With("controller", "wallet"),
-		pool,
-		vStart,
-		rStart,
-		idg,
+		repo:             repo,
+		logger:           logger.With("controller", "wallet"),
+		pool:             pool,
+		vStartingBalance: decimal.NewFromInt(100000),
+		rStartingBalance: decimal.Zero,
+		idGenerator:      idg,
 	}
 }

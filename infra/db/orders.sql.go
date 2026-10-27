@@ -11,87 +11,224 @@ import (
 	decimal "github.com/shopspring/decimal"
 )
 
-const createExecution = `-- name: CreateExecution :exec
-insert into
-    executions (
-        id,
-        "order",
-        price,
-        quantity,
-        order_side,
-        order_status,
-        order_type,
-        symbol,
+const createExecution = `-- name: CreateExecution :one
+INSERT INTO
+    "executions" (
+        "id",
+        "match_quantity",
+        "symbol",
+        "bid_price",
+        "bid_status",
+        "bid_currency",
+        "bid_exchange_rate_snapshot",
+        "exec_value",
+        "ask_price",
+        "ask_status",
+        "ask_currency",
+        "ask_exchange_rate_snapshot",
+        "tracing_id",
         "user",
-        fee_currency,
-        fee_rate,
-        fee_amount,
-        exec_status,
-        tracing_id,
-        idempotency_token
+        "bid",
+        "ask",
+        "ask_wallet",
+        "bid_wallet",
+        "wallets_type"
     )
-values
+VALUES
     (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8,
-        $9,
-        $10,
-        $11,
-        $12,
-        $13,
-        $14,
-        $15
+        $1, -- id
+        $2, -- match_quantity
+        $3, -- symbol
+        $4, -- bid_price
+        $5, -- bid_status
+        $6, -- bid_currency
+        $7, -- bid_exchange_rate_snapshot
+        $8, -- exec_value
+        $9, -- ask_price
+        $10, -- ask_status
+        $11, -- ask_currency
+        $12, -- ask_exchange_rate_snapshot
+        $13, -- tracing_id
+        $14, -- user
+        $15, -- bid
+        $16, -- ask
+        $17, -- ask_wallet
+        $18, -- bid_wallet
+        $19 -- wallets_type
     )
+returning
+    id, match_quantity, symbol, "user", bid, bid_price, bid_status, bid_currency, bid_exchange_rate_snapshot, exec_value, ask, ask_price, ask_status, ask_currency, ask_exchange_rate_snapshot, exec_status, recorded_at, updated_at, tracing_id, ask_wallet, bid_wallet, wallets_type
 `
 
 type CreateExecutionParams struct {
-	ID               string
-	Order            string
-	Price            decimal.Decimal
-	Quantity         decimal.Decimal
-	OrderSide        OrderSide
-	OrderStatus      OrderStatus
-	OrderType        OrderType
-	Symbol           string
-	User             *string
-	FeeCurrency      string
-	FeeRate          decimal.Decimal
-	FeeAmount        decimal.Decimal
-	ExecStatus       ExecutionStatus
-	TracingID        string
-	IdempotencyToken string
+	ID                      string
+	MatchQuantity           decimal.Decimal
+	Symbol                  string
+	BidPrice                decimal.Decimal
+	BidStatus               OrderStatus
+	BidCurrency             string
+	BidExchangeRateSnapshot decimal.Decimal
+	ExecValue               decimal.Decimal
+	AskPrice                decimal.Decimal
+	AskStatus               OrderStatus
+	AskCurrency             string
+	AskExchangeRateSnapshot decimal.Decimal
+	TracingID               string
+	User                    *string
+	Bid                     *string
+	Ask                     *string
+	AskWallet               *string
+	BidWallet               *string
+	WalletsType             WalletType
 }
 
-func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams) error {
-	_, err := q.db.Exec(ctx, createExecution,
+func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams) (Execution, error) {
+	row := q.db.QueryRow(ctx, createExecution,
 		arg.ID,
-		arg.Order,
-		arg.Price,
-		arg.Quantity,
-		arg.OrderSide,
-		arg.OrderStatus,
-		arg.OrderType,
+		arg.MatchQuantity,
 		arg.Symbol,
-		arg.User,
-		arg.FeeCurrency,
-		arg.FeeRate,
-		arg.FeeAmount,
-		arg.ExecStatus,
+		arg.BidPrice,
+		arg.BidStatus,
+		arg.BidCurrency,
+		arg.BidExchangeRateSnapshot,
+		arg.ExecValue,
+		arg.AskPrice,
+		arg.AskStatus,
+		arg.AskCurrency,
+		arg.AskExchangeRateSnapshot,
 		arg.TracingID,
-		arg.IdempotencyToken,
+		arg.User,
+		arg.Bid,
+		arg.Ask,
+		arg.AskWallet,
+		arg.BidWallet,
+		arg.WalletsType,
 	)
+	var i Execution
+	err := row.Scan(
+		&i.ID,
+		&i.MatchQuantity,
+		&i.Symbol,
+		&i.User,
+		&i.Bid,
+		&i.BidPrice,
+		&i.BidStatus,
+		&i.BidCurrency,
+		&i.BidExchangeRateSnapshot,
+		&i.ExecValue,
+		&i.Ask,
+		&i.AskPrice,
+		&i.AskStatus,
+		&i.AskCurrency,
+		&i.AskExchangeRateSnapshot,
+		&i.ExecStatus,
+		&i.RecordedAt,
+		&i.UpdatedAt,
+		&i.TracingID,
+		&i.AskWallet,
+		&i.BidWallet,
+		&i.WalletsType,
+	)
+	return i, err
+}
+
+const executionExists = `-- name: ExecutionExists :one
+select
+    exists (
+        select
+            1
+        from
+            executions
+        where
+            ask = $1
+            and bid = $2
+    )
+`
+
+type ExecutionExistsParams struct {
+	Ask *string
+	Bid *string
+}
+
+func (q *Queries) ExecutionExists(ctx context.Context, arg ExecutionExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, executionExists, arg.Ask, arg.Bid)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const fillOrderById = `-- name: FillOrderById :exec
+update orders
+set
+    updated_at = now(),
+    quantity = greatest(quantity - $1, 0),
+    status = (
+        case
+            when (quantity - $1) <= 0 then 'filled'
+            when (quantity - $1) > 0
+            and (quantity - $1) < quantity then 'partially_filled'
+            else status
+        end
+    )
+where
+    id = $2
+    and status = 'submitted'
+`
+
+type FillOrderByIdParams struct {
+	Quantity decimal.Decimal
+	ID       string
+}
+
+func (q *Queries) FillOrderById(ctx context.Context, arg FillOrderByIdParams) error {
+	_, err := q.db.Exec(ctx, fillOrderById, arg.Quantity, arg.ID)
 	return err
+}
+
+const findExecutionById = `-- name: FindExecutionById :one
+select
+    id, match_quantity, symbol, "user", bid, bid_price, bid_status, bid_currency, bid_exchange_rate_snapshot, exec_value, ask, ask_price, ask_status, ask_currency, ask_exchange_rate_snapshot, exec_status, recorded_at, updated_at, tracing_id, ask_wallet, bid_wallet, wallets_type
+from
+    executions
+where
+    id = $1
+limit
+    1
+`
+
+func (q *Queries) FindExecutionById(ctx context.Context, id string) (Execution, error) {
+	row := q.db.QueryRow(ctx, findExecutionById, id)
+	var i Execution
+	err := row.Scan(
+		&i.ID,
+		&i.MatchQuantity,
+		&i.Symbol,
+		&i.User,
+		&i.Bid,
+		&i.BidPrice,
+		&i.BidStatus,
+		&i.BidCurrency,
+		&i.BidExchangeRateSnapshot,
+		&i.ExecValue,
+		&i.Ask,
+		&i.AskPrice,
+		&i.AskStatus,
+		&i.AskCurrency,
+		&i.AskExchangeRateSnapshot,
+		&i.ExecStatus,
+		&i.RecordedAt,
+		&i.UpdatedAt,
+		&i.TracingID,
+		&i.AskWallet,
+		&i.BidWallet,
+		&i.WalletsType,
+	)
+	return i, err
 }
 
 const findOpenOrders = `-- name: FindOpenOrders :many
 select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
 from
     orders
 where
@@ -131,9 +268,10 @@ func (q *Queries) FindOpenOrders(ctx context.Context, arg FindOpenOrdersParams) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TracingID,
-			&i.Fee,
 			&i.Currency,
 			&i.ExchangeRate,
+			&i.BidTransaction,
+			&i.AskWallet,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +285,7 @@ func (q *Queries) FindOpenOrders(ctx context.Context, arg FindOpenOrdersParams) 
 
 const findOrderById = `-- name: FindOrderById :one
 select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
 from
     orders
 where
@@ -171,16 +309,17 @@ func (q *Queries) FindOrderById(ctx context.Context, id string) (Order, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TracingID,
-		&i.Fee,
 		&i.Currency,
 		&i.ExchangeRate,
+		&i.BidTransaction,
+		&i.AskWallet,
 	)
 	return i, err
 }
 
 const findOwnedOrder = `-- name: FindOwnedOrder :one
 select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
 from
     orders
 where
@@ -212,16 +351,17 @@ func (q *Queries) FindOwnedOrder(ctx context.Context, arg FindOwnedOrderParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TracingID,
-		&i.Fee,
 		&i.Currency,
 		&i.ExchangeRate,
+		&i.BidTransaction,
+		&i.AskWallet,
 	)
 	return i, err
 }
 
 const getOrders = `-- name: GetOrders :many
 select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, fee, currency, exchange_rate
+    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
 from
     orders
 where
@@ -260,13 +400,53 @@ func (q *Queries) GetOrders(ctx context.Context, arg GetOrdersParams) ([]Order, 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TracingID,
-			&i.Fee,
 			&i.Currency,
 			&i.ExchangeRate,
+			&i.BidTransaction,
+			&i.AskWallet,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lookupPendingExecutions = `-- name: LookupPendingExecutions :many
+select
+    id
+from
+    executions
+where
+    exec_status = 'pending'
+    and id > $1
+order by
+    id
+limit
+    $2
+`
+
+type LookupPendingExecutionsParams struct {
+	ID    string
+	Limit int32
+}
+
+func (q *Queries) LookupPendingExecutions(ctx context.Context, arg LookupPendingExecutionsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, lookupPendingExecutions, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -366,26 +546,11 @@ INSERT INTO
         stop_price,
         client_order_id,
         tracing_id,
-        fee,
         currency,
         exchange_rate
     )
 VALUES
-    (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8,
-        $9,
-        $10,
-        $11,
-        $12,
-        $13
-    )
+    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `
 
 type PlaceOrderParams struct {
@@ -399,7 +564,6 @@ type PlaceOrderParams struct {
 	StopPrice     decimal.NullDecimal
 	ClientOrderID *string
 	TracingID     string
-	Fee           decimal.Decimal
 	Currency      string
 	ExchangeRate  decimal.Decimal
 }
@@ -416,9 +580,61 @@ func (q *Queries) PlaceOrder(ctx context.Context, arg PlaceOrderParams) error {
 		arg.StopPrice,
 		arg.ClientOrderID,
 		arg.TracingID,
-		arg.Fee,
 		arg.Currency,
 		arg.ExchangeRate,
 	)
+	return err
+}
+
+const updateExecutionOrdersStatuses = `-- name: UpdateExecutionOrdersStatuses :exec
+update executions e
+set
+    updated_at = now(),
+    bid_status = b.status,
+    ask_status = a.status
+from
+    (
+        select
+            id,
+            status
+        from
+            orders for no key
+        update
+    ) b,
+    (
+        select
+            id,
+            status
+        from
+            orders for no key
+        update
+    ) a
+where
+    e.id = $1
+    and b.id = e.bid
+    and a.id = e.ask
+`
+
+func (q *Queries) UpdateExecutionOrdersStatuses(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, updateExecutionOrdersStatuses, id)
+	return err
+}
+
+const updateExecutionStatus = `-- name: UpdateExecutionStatus :exec
+update executions
+set
+    updated_at = now(),
+    exec_status = $1
+where
+    id = $2
+`
+
+type UpdateExecutionStatusParams struct {
+	ExecStatus ExecutionStatus
+	ID         string
+}
+
+func (q *Queries) UpdateExecutionStatus(ctx context.Context, arg UpdateExecutionStatusParams) error {
+	_, err := q.db.Exec(ctx, updateExecutionStatus, arg.ExecStatus, arg.ID)
 	return err
 }

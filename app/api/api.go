@@ -2,14 +2,11 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/brinestone/mogtrade/core/contract"
-	"github.com/brinestone/mogtrade/infra/db"
 	"github.com/brinestone/mogtrade/web/controller"
 	"github.com/brinestone/mogtrade/web/middleware"
 	"github.com/brinestone/mogtrade/web/validators"
@@ -18,8 +15,6 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/shopspring/decimal"
 	"go-slim.dev/ioc"
 )
 
@@ -40,10 +35,10 @@ func MountApiV1(ctx context.Context, r *gin.RouterGroup) error {
 		c.MountV1(router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Orders) {
-		c.MountV1(router)
+		c.MountV1(ctx, router)
 	})
 	ioc.Invoke(ctx, func(c *controller.Wallets) {
-		c.MountV1(router)
+		c.MountV1(ctx, router)
 	})
 	ioc.Invoke(ctx, func(c *controller.User) {
 		c.MountV1(router)
@@ -71,9 +66,7 @@ func SetupControllers() error {
 	ioc.Factory(controller.NewFeedController, true)
 	ioc.Factory(controller.NewOrdersController, true)
 	ioc.Factory(controller.NewAuthController, true)
-	ioc.Factory(func(r *db.Queries, l *slog.Logger, p *pgxpool.Pool, idg contract.IdFactory) *controller.Wallets {
-		return controller.NewWalletsController(r, l, p, decimal.NewFromFloat(100_000), decimal.Zero, idg)
-	}, true)
+	ioc.Factory(controller.NewWalletsController, true)
 	ioc.Factory(controller.NewUserController, true)
 	ioc.Factory(controller.NewPaymentsController, true)
 	return nil

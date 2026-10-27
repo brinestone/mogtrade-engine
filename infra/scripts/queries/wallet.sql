@@ -1,3 +1,14 @@
+-- name: FindWalletFromWalletTransactionSrc :one
+select
+    w.*
+from
+    wallet_transactions wt
+    inner join wallets w on w.id = wt.src
+where
+    wt.id = $1
+limit
+    1;
+
 -- name: FindWalletTransactionById :one
 select
     *
