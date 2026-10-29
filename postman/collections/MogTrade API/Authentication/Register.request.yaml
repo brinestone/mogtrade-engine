@@ -10,7 +10,7 @@ body:
   content: |-
     {
       "names": "{{$randomFullName}}",
-      "email": "{{email}}",
+      "email": "jane@example.com",
       "password": "{{vault:password}}",
       "confirmPassword": "{{vault:password}}"
     }

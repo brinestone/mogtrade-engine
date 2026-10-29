@@ -8,18 +8,21 @@ import (
 	"go-slim.dev/ioc"
 )
 
-func GetDefaultExchangeRateFor(ctx context.Context, curr string) (float32, error) {
-	return ioc.Call2[float32](ctx, func(cc contract.CurrencyConverter) (float32, error) {
+var one = decimal.NewFromInt(1)
+
+func GetDefaultExchangeRateFor(ctx context.Context, curr string) (decimal.Decimal, error) {
+	return ioc.Call2[decimal.Decimal](ctx, func(cc contract.CurrencyConverter) (decimal.Decimal, error) {
 		rates, err := cc.GetDefaultExchangeRates(ctx, curr)
 		if err != nil {
-			return 0, err
+			return decimal.Zero, err
 		}
 
 		rate := rates[0]
-		if rate == 0 {
-			return 1.0, nil
+		if rate <= 0 {
+			return decimal.Zero, nil
 		}
-		return 1 / rate, nil
+
+		return one.Div(decimal.NewFromFloat32(rate)), nil
 	})
 }
 
@@ -32,7 +35,11 @@ func GetDefaultExchangeRateDecimalFor(ctx context.Context, curr ...string) ([]de
 		}
 
 		for _, r := range _rates {
-			rates = append(rates, decimal.NewFromInt(1).Div(decimal.NewFromFloat32(r)))
+			if r <= 0 {
+				rates = append(rates, decimal.Zero)
+			} else {
+				rates = append(rates, decimal.NewFromInt(1).Div(decimal.NewFromFloat32(r)))
+			}
 		}
 
 		return rates, nil

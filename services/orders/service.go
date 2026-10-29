@@ -38,7 +38,7 @@ func SubmitOrder(ctx context.Context, q *db.Queries, params SubmitOrderParams) e
 		return err
 	}
 
-	if !isTransitionValid(order, db.OrderStatusSubmitted) {
+	if !isOrderStatusTransitionValid(order, db.OrderStatusSubmitted) {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidOrderTransition, *order.Status, db.OrderStatusSubmitted)
 	}
 	return q.MarkOrderSubmitted(ctx, db.MarkOrderSubmittedParams{UserID: &params.OwnerId, ID: params.OrderId})
@@ -61,7 +61,7 @@ func RejectOrder(ctx context.Context, q *db.Queries, params RejectOrderParams) e
 		return err
 	}
 
-	if !isTransitionValid(order, db.OrderStatusRejected) {
+	if !isOrderStatusTransitionValid(order, db.OrderStatusRejected) {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidOrderTransition, *order.Status, db.OrderStatusRejected)
 	}
 
@@ -85,7 +85,7 @@ func CancelOrder(ctx context.Context, q *db.Queries, params CancelOrderParams) (
 		return order, err
 	}
 
-	if !isTransitionValid(order, db.OrderStatusCancelled) {
+	if !isOrderStatusTransitionValid(order, db.OrderStatusCancelled) {
 		return order, fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidOrderTransition, *order.Status, db.OrderStatusCancelled)
 	}
 
@@ -94,7 +94,7 @@ func CancelOrder(ctx context.Context, q *db.Queries, params CancelOrderParams) (
 	return order, err
 }
 
-func isTransitionValid(o db.Order, status db.OrderStatus) bool {
+func isOrderStatusTransitionValid(o db.Order, status db.OrderStatus) bool {
 	if o.Status == nil {
 		return false
 	}
