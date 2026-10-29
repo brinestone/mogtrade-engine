@@ -23,7 +23,6 @@ import (
 	"github.com/brinestone/mogtrade/infra/sources"
 	"github.com/brinestone/mogtrade/infra/storage"
 	"github.com/brinestone/mogtrade/services/market"
-	"github.com/brinestone/mogtrade/services/matching"
 	"github.com/brinestone/mogtrade/services/orders"
 	"github.com/brinestone/mogtrade/web/api"
 	"github.com/gin-gonic/gin"
@@ -32,7 +31,6 @@ import (
 )
 
 func setupServices() error {
-	ioc.Factory(matching.NewMatchingEngine, true)
 	if err := ioc.Factory(func() *market.ExchangeHub {
 		return market.NewExchangeHub()
 	}, true); err != nil {
@@ -48,9 +46,6 @@ func setupServices() error {
 		return err
 	}
 	if err := ioc.Factory(orders.NewRiskEngine, true); err != nil {
-		return err
-	}
-	if err := ioc.Factory(matching.NewMatchingEngine, true); err != nil {
 		return err
 	}
 	return nil
@@ -90,7 +85,7 @@ func setupDbConnection(ctx context.Context) error {
 	return nil
 }
 
-func setupAdapters(ctx context.Context) error {
+func setupAdapters() error {
 	ioc.Factory(func() contract.RoleAuthorizer {
 		return &contract.DefaultRoleAuthorizer{}
 	})
@@ -262,7 +257,7 @@ func bootstrapApplication(ctx context.Context) {
 	if err := setupServices(); err != nil {
 		panic(err)
 	}
-	if err := setupAdapters(ctx); err != nil {
+	if err := setupAdapters(); err != nil {
 		panic(err)
 	}
 	if err := api.SetupControllers(); err != nil {

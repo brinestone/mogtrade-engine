@@ -1,3 +1,15 @@
+-- name: GetOrderWalletType :one
+select
+    bw."type" as wallet_type
+from
+    orders o
+    inner join wallet_transactions wt on o.bid_transaction = wt.id
+    inner join wallets bw on wt.src = bw.id
+where
+    o.id = $1
+limit
+    1;
+
 -- name: AttachAskWallettoOrder :exec
 update orders
 set
@@ -90,16 +102,19 @@ set
 where
     id = $2;
 
--- name: FindOpenOrders :many
+-- name: LookupOpenOrders :many
 select
-    *
+    o.*,
+    bw."type" as wallet_type
 from
-    orders
+    orders o
+    inner join wallet_transactions wt on o.bid_transaction = wt.id
+    inner join wallets bw on wt.src = bw.id
 where
-    id > $1
-    and status in ('pending', 'submitted', 'partially_filled')
+    o.id > $1
+    and o.status in ('pending', 'submitted', 'partially_filled')
 order by
-    id
+    o.id
 limit
     $2;
 
