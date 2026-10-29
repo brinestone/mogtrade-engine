@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	decimal "github.com/shopspring/decimal"
 )
 
@@ -264,63 +265,6 @@ func (q *Queries) FindExecutionById(ctx context.Context, id string) (Execution, 
 	return i, err
 }
 
-const findOpenOrders = `-- name: FindOpenOrders :many
-select
-    user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
-from
-    orders
-where
-    id > $1
-    and status in ('pending', 'submitted', 'partially_filled')
-order by
-    id
-limit
-    $2
-`
-
-type FindOpenOrdersParams struct {
-	ID    string
-	Limit int32
-}
-
-func (q *Queries) FindOpenOrders(ctx context.Context, arg FindOpenOrdersParams) ([]Order, error) {
-	rows, err := q.db.Query(ctx, findOpenOrders, arg.ID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Order
-	for rows.Next() {
-		var i Order
-		if err := rows.Scan(
-			&i.UserID,
-			&i.Symbol,
-			&i.Side,
-			&i.OrderType,
-			&i.Quantity,
-			&i.LimitPrice,
-			&i.StopPrice,
-			&i.ID,
-			&i.ClientOrderID,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.TracingID,
-			&i.Currency,
-			&i.ExchangeRate,
-			&i.BidTransaction,
-			&i.AskWallet,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const findOrderById = `-- name: FindOrderById :one
 select
     user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
@@ -397,6 +341,26 @@ func (q *Queries) FindOwnedOrder(ctx context.Context, arg FindOwnedOrderParams) 
 	return i, err
 }
 
+const getOrderWalletType = `-- name: GetOrderWalletType :one
+select
+    bw."type" as wallet_type
+from
+    orders o
+    inner join wallet_transactions wt on o.bid_transaction = wt.id
+    inner join wallets bw on wt.src = bw.id
+where
+    o.id = $1
+limit
+    1
+`
+
+func (q *Queries) GetOrderWalletType(ctx context.Context, id string) (WalletType, error) {
+	row := q.db.QueryRow(ctx, getOrderWalletType, id)
+	var wallet_type WalletType
+	err := row.Scan(&wallet_type)
+	return wallet_type, err
+}
+
 const getOrders = `-- name: GetOrders :many
 select
     user_id, symbol, side, order_type, quantity, limit_price, stop_price, id, client_order_id, status, created_at, updated_at, tracing_id, currency, exchange_rate, bid_transaction, ask_wallet
@@ -442,6 +406,88 @@ func (q *Queries) GetOrders(ctx context.Context, arg GetOrdersParams) ([]Order, 
 			&i.ExchangeRate,
 			&i.BidTransaction,
 			&i.AskWallet,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lookupOpenOrders = `-- name: LookupOpenOrders :many
+select
+    o.user_id, o.symbol, o.side, o.order_type, o.quantity, o.limit_price, o.stop_price, o.id, o.client_order_id, o.status, o.created_at, o.updated_at, o.tracing_id, o.currency, o.exchange_rate, o.bid_transaction, o.ask_wallet,
+    bw."type" as wallet_type
+from
+    orders o
+    inner join wallet_transactions wt on o.bid_transaction = wt.id
+    inner join wallets bw on wt.src = bw.id
+where
+    o.id > $1
+    and o.status in ('pending', 'submitted', 'partially_filled')
+order by
+    o.id
+limit
+    $2
+`
+
+type LookupOpenOrdersParams struct {
+	ID    string
+	Limit int32
+}
+
+type LookupOpenOrdersRow struct {
+	UserID         *string
+	Symbol         string
+	Side           OrderSide
+	OrderType      OrderType
+	Quantity       decimal.Decimal
+	LimitPrice     decimal.NullDecimal
+	StopPrice      decimal.NullDecimal
+	ID             string
+	ClientOrderID  *string
+	Status         *OrderStatus
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	TracingID      string
+	Currency       string
+	ExchangeRate   decimal.Decimal
+	BidTransaction *string
+	AskWallet      *string
+	WalletType     WalletType
+}
+
+func (q *Queries) LookupOpenOrders(ctx context.Context, arg LookupOpenOrdersParams) ([]LookupOpenOrdersRow, error) {
+	rows, err := q.db.Query(ctx, lookupOpenOrders, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LookupOpenOrdersRow
+	for rows.Next() {
+		var i LookupOpenOrdersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Symbol,
+			&i.Side,
+			&i.OrderType,
+			&i.Quantity,
+			&i.LimitPrice,
+			&i.StopPrice,
+			&i.ID,
+			&i.ClientOrderID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TracingID,
+			&i.Currency,
+			&i.ExchangeRate,
+			&i.BidTransaction,
+			&i.AskWallet,
+			&i.WalletType,
 		); err != nil {
 			return nil, err
 		}

@@ -33,14 +33,15 @@ var (
 )
 
 type Orders struct {
-	repo           *db.Queries
-	logger         *slog.Logger
-	riskEngine     *orders.RiskEngine
-	pool           *pgxpool.Pool
-	matchingEngine *matching.Engine
-	idGenerator    contract.IdFactory
-	eb             contract.EventBus
-	cc             contract.CurrencyConverter
+	repo                  *db.Queries
+	logger                *slog.Logger
+	riskEngine            *orders.RiskEngine
+	pool                  *pgxpool.Pool
+	virtualMatchingEngine *matching.Engine
+	realMatchingEngine    *matching.Engine
+	idGenerator           contract.IdFactory
+	eb                    contract.EventBus
+	cc                    contract.CurrencyConverter
 }
 
 func (o *Orders) bootstrapMatchingEngine(ctx context.Context) {
@@ -51,7 +52,7 @@ func (o *Orders) bootstrapMatchingEngine(ctx context.Context) {
 	var batches = 0
 	var added = 0
 	for {
-		batch, err := o.repo.FindOpenOrders(ctx, db.FindOpenOrdersParams{
+		batch, err := o.repo.LookupOpenOrders(ctx, db.LookupOpenOrdersParams{
 			ID:    cursor,
 			Limit: batchSize,
 		})
@@ -65,13 +66,14 @@ func (o *Orders) bootstrapMatchingEngine(ctx context.Context) {
 		}
 
 		cursor = batch[len(batch)-1].ID
-		for _, order := range batch {
-			o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
-				OrderId:  order.ID,
-				Symbol:   order.Symbol,
-				Type:     order.Side,
-				Quantity: order.Quantity,
-				Price:    order.LimitPrice.Decimal,
+		for _, row := range batch {
+			engine := o.getEngine(row.WalletType)
+			engine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
+				OrderId:  row.ID,
+				Symbol:   row.Symbol,
+				Type:     row.Side,
+				Quantity: row.Quantity,
+				Price:    row.LimitPrice.Decimal,
 			})
 			added++
 		}
@@ -236,7 +238,9 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		return
 	}
 
-	go o.matchingEngine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
+	var engine = o.getEngine(payload.WalletType)
+
+	go engine.PlaceMatchOrder(matching.PlaceMatchOrderParams{
 		OrderId:  orderId,
 		Symbol:   payload.Symbol,
 		Type:     db.OrderSide(payload.Side),
@@ -248,6 +252,14 @@ func (o *Orders) handlePlaceOrder(ctx *gin.Context) {
 		OrderId:   orderId,
 		Timestamp: time.Now(),
 	})
+}
+
+func (o *Orders) getEngine(t db.WalletType) *matching.Engine {
+	if t == db.WalletTypeReal {
+		return o.realMatchingEngine
+	} else {
+		return o.virtualMatchingEngine
+	}
 }
 func (o *Orders) handleFindOrders(ctx *gin.Context) {
 	cursor := ctx.Query("cursor")
@@ -301,7 +313,8 @@ func (o *Orders) handleCancelOrder(c *gin.Context) {
 		return
 	}
 
-	o.matchingEngine.CancelMatchOrder(orderId, order.Symbol, order.Side, order.LimitPrice.Decimal)
+	walletType, _ := o.repo.GetOrderWalletType(c, orderId)
+	o.getEngine(walletType).CancelMatchOrder(orderId, order.Symbol, order.Side, order.LimitPrice.Decimal)
 	c.Status(http.StatusAccepted)
 }
 
@@ -441,14 +454,15 @@ func (c *Orders) subscribeToEventsV1(ctx context.Context) {
 	go c.handleOnMatchFoundEvent(ctx, matchFound)
 }
 
-func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdFactory, e *matching.Engine, eb contract.EventBus) *Orders {
+func NewOrdersController(l *slog.Logger, q *db.Queries, re *orders.RiskEngine, p *pgxpool.Pool, idg contract.IdFactory, eb contract.EventBus) *Orders {
 	return &Orders{
-		repo:           q,
-		logger:         l.With("controller", "orders"),
-		riskEngine:     re,
-		pool:           p,
-		idGenerator:    idg,
-		matchingEngine: e,
-		eb:             eb,
+		repo:                  q,
+		logger:                l.With("controller", "orders"),
+		riskEngine:            re,
+		pool:                  p,
+		virtualMatchingEngine: matching.NewMatchingEngine(l.With("engineType", "virtual"), eb),
+		realMatchingEngine:    matching.NewMatchingEngine(l.With("engineType", "real"), eb),
+		idGenerator:           idg,
+		eb:                    eb,
 	}
 }
