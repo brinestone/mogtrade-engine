@@ -25,7 +25,8 @@ import (
 )
 
 const (
-	EventKeyOrderCreatedV1 string = "order.created.v1"
+	EventKeyOrderCreatedV1   string = "order.created.v1"
+	EventKeyOrderCancelledV1 string = "order.cancelled.v1"
 )
 
 var (
@@ -292,12 +293,46 @@ func (o *Orders) handleCancelOrder(c *gin.Context) {
 	userId := helpers.GetCurrentUserId(c)
 	orderId := c.Param("order")
 
+	var refundedAmount decimal.Decimal
 	order, err := helpers.WithValueTransaction(c.Request.Context(), func(tx pgx.Tx) (db.Order, error) {
 		repo := o.repo.WithTx(tx)
-		return orders.CancelOrder(c.Request.Context(), repo, orders.CancelOrderParams{
+		ord, err := orders.CancelOrder(c.Request.Context(), repo, orders.CancelOrderParams{
 			OwnerId: userId,
 			OrderId: orderId,
 		})
+		if err != nil {
+			return ord, err
+		}
+
+		if ord.Side == db.OrderSideBuy && ord.BidTransaction != nil && ord.Quantity.GreaterThan(decimal.Zero) {
+			userWallet, err := repo.FindWalletFromWalletTransactionSrc(c.Request.Context(), *ord.BidTransaction)
+			if err == nil {
+				systemWallet := helpers.GetSystemWalletByType(userWallet.Type)
+				refundAmount := ord.Quantity.Mul(ord.LimitPrice.Decimal).Mul(ord.ExchangeRate)
+				refundedAmount = refundAmount
+				txId := o.idGenerator()
+				err = billing.RecordWalletTransaction(c.Request.Context(), repo, billing.RecordWalletTransactionParams{
+					Id:               txId,
+					Src:              &systemWallet,
+					Dest:             &userWallet.ID,
+					Intent:           "order cancelled",
+					IdempotencyToken: fmt.Sprintf("cancel-%s", ord.ID),
+					DoneBy:           userId,
+					TracingId:        ord.TracingID,
+					Currency:         ord.Currency,
+					ExchangeRate:     ord.ExchangeRate,
+					Value:            refundAmount,
+				})
+				if err == nil {
+					_ = billing.UpdateWalletTransactionStatus(c.Request.Context(), repo, billing.UpdateTransactionStatusParams{
+						TransactionId: txId,
+						Status:        db.TransactionStatusCompleted,
+					})
+				}
+			}
+		}
+
+		return ord, nil
 	})
 	if err != nil {
 		if errors.Is(err, orders.ErrOrderNotFound) {
@@ -315,6 +350,15 @@ func (o *Orders) handleCancelOrder(c *gin.Context) {
 
 	walletType, _ := o.repo.GetOrderWalletType(c, orderId)
 	o.getEngine(walletType).CancelMatchOrder(orderId, order.Symbol, order.Side, order.LimitPrice.Decimal)
+
+	o.eb.Publish(EventKeyOrderCancelledV1, eventpayloads.OrderCancelled{
+		OrderId:        orderId,
+		UserId:         userId,
+		Symbol:         order.Symbol,
+		RefundedAmount: refundedAmount,
+		Timestamp:      time.Now(),
+	})
+
 	c.Status(http.StatusAccepted)
 }
 

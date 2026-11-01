@@ -87,6 +87,7 @@ resource Order {
     list: GetOrders
     read: FindOrder
     create: PlaceOrder
+    delete: CancelOrder
     properties: {
         symbol: String
         side: OrderSide
@@ -174,6 +175,24 @@ operation FindOrder {
     output := with [OrderRecord] {}
     errors: [
         NotFoundError
+    ]
+}
+
+@idempotent
+@auth([httpBearerAuth])
+@tags(["Order"])
+@http(method: "DELETE", uri: "/api/v1/orders/{id}", code: 202)
+@documentation("Cancels an open or partially-filled order and refunds held escrow funds for buy orders.")
+operation CancelOrder {
+    input := for Order {
+        @required
+        @httpLabel
+        $id
+    }
+    errors: [
+        NotFoundError
+        UnprocessibleError
+        UnauthorizedError
     ]
 }
 
